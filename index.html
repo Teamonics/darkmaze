@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Dark Maze</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="A top-down maze in the dark. Your flashlight is dying. Find the one way out.">
+<meta name="description" content="A maze in the dark and a dying flashlight. Get out before your light does.">
 <meta name="theme-color" content="#000000">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -165,7 +165,7 @@ body {
     grid-template-areas: "logo rules" "lede rules" "actions rules" "keys rules";
   }
   .sheet[data-kind="title"] .logo { grid-area: logo; font-size: 60px; }
-  .sheet[data-kind="title"] .lede { grid-area: lede; font-size: 14px; }
+  .sheet[data-kind="title"] .lede { grid-area: lede; font-size: 16px; }
   .sheet[data-kind="title"] .actions { grid-area: actions; margin-top: 14px; }
   .sheet[data-kind="title"] .keys { grid-area: keys; }
   .sheet[data-kind="title"] .rules { grid-area: rules; align-self: center; margin: 0; padding: 0 0 0 18px; border-top: 0; border-left: 1px solid var(--line); }
@@ -181,10 +181,9 @@ body {
   animation: sweep 7s ease-in-out infinite alternate;
 }
 @keyframes sweep { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
-.lede { margin: 12px 0 0; color: var(--ink); font-size: 16px; text-wrap: balance; }
-.rules { list-style: none; margin: 16px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line); display: grid; gap: 11px; }
-.rules li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; color: var(--dim); font-size: 14px; }
-.rules li b { color: var(--ink); font-weight: 600; }
+.lede { margin: 14px 0 0; color: var(--ink); font-size: 18px; text-wrap: balance; }
+.rules { list-style: none; margin: 18px 0 0; padding: 16px 0 0; border-top: 1px solid var(--line); display: grid; gap: 12px; }
+.rules li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; align-items: center; color: var(--ink); font-size: 15px; }
 .rules svg { width: 24px; height: 24px; color: var(--bolt); }
 .eyebrow { margin: 0 0 6px; font: 700 11px/1 var(--font-mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--bolt); }
 .sheet h2 {
@@ -223,7 +222,7 @@ body {
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Maze. Drag anywhere to walk."></canvas>
+<canvas id="game" aria-label="Maze. Drag anywhere to move."></canvas>
 
 <header class="hud" id="hud" hidden>
   <div class="lvl" id="lvl">LV <b>1</b></div>
@@ -258,7 +257,7 @@ body {
       </g>
     </svg>
   </div>
-  <p id="hintText">Drag anywhere to walk</p>
+  <p id="hintText">Drag anywhere to move</p>
 </div>
 
 <div class="overlay" id="overlay" hidden>
@@ -987,7 +986,7 @@ body {
     hud.lastB = -1; hud.lastSec = -1;
     save.level = n; persist();
     if (!save.hintSeen) {
-      hintText.textContent = coarse ? 'Drag anywhere to walk' : 'Drag with the mouse, or use WASD / arrow keys';
+      hintText.textContent = coarse ? 'Drag anywhere to move' : 'Drag with the mouse, or use WASD / arrow keys';
       hintEl.hidden = false;
     }
     updateCamera(0, lightParams(), true);
@@ -1104,17 +1103,17 @@ body {
     const lvl = save.level || 1;
     showSheet(`
       <h1 class="logo" id="sheetTitle" aria-label="Dark Maze"><span>Dark</span><span>Maze</span></h1>
-      <p class="lede">A small dot, a dying flashlight, and one way out.</p>
+      <p class="lede">Get out before your light does.</p>
       <ul class="rules">
-        <li>${ICON.drag}<span><b>Drag anywhere</b> to walk. Your light points the way you drag.</span></li>
-        <li>${ICON.bolt}<span>The beam dims and shortens until it dies. <b>Grab bolts</b> to recharge.</span></li>
-        <li>${ICON.wall}<span>Light shines through walls, but you can’t. <b>Only one path</b> leads out.</span></li>
+        <li>${ICON.drag}<span>Drag to move.</span></li>
+        <li>${ICON.bolt}<span>Grab bolts to stay lit.</span></li>
+        <li>${ICON.wall}<span>Light goes through walls. You&nbsp;don’t.</span></li>
       </ul>
       <div class="actions">
-        <button class="btn primary" type="button" data-action="play">${lvl > 1 ? `Continue · Level ${lvl}` : 'Start'}</button>
-        ${lvl > 1 ? '<button class="btn quiet" type="button" data-action="fresh">Start over at level 1</button>' : ''}
+        <button class="btn primary" type="button" data-action="play">${lvl > 1 ? `Continue · Level ${lvl}` : 'Play'}</button>
+        ${lvl > 1 ? '<button class="btn quiet" type="button" data-action="fresh">Start over</button>' : ''}
       </div>
-      <p class="keys">Mouse drag or WASD / arrow keys · P pauses</p>`, 'title');
+      <p class="keys">Or WASD / arrow keys · P to pause</p>`, 'title');
   }
 
   function screenPause() {
