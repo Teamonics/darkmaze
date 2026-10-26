@@ -1,0 +1,1453 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Dark Maze</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="A top-down maze in the dark. Your flashlight is dying. Find the one way out.">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23000'/%3E%3Cpath d='M26 32 60 14v36z' fill='%23ffecc8' opacity='.55'/%3E%3Ccircle cx='24' cy='32' r='8' fill='%23f6efe0'/%3E%3C/svg%3E">
+<style>
+/* Layout: one full-bleed canvas world; a thin HUD pinned to the top safe edge, sheets rise from the bottom (or the right edge in landscape). */
+:root {
+  --soot: #000000;                 /* the dark itself */
+  --panel: rgba(17, 14, 10, 0.9);  /* sheets: warm near-black */
+  --line: rgba(255, 236, 204, 0.14);
+  --beam: #ffecc8;                 /* tungsten flashlight light */
+  --ink: #efe6d3;                  /* primary text */
+  --dim: #a1957f;                  /* secondary text */
+  --bolt: #ffc93c;                 /* recharge bolts + primary action */
+  --bolt-ink: #1f1604;
+  --ember: #ff5b3d;                /* critical battery */
+  --moon: #bcdcff;                 /* the exit's light */
+  --font-display: "Avenir Next Condensed", "Bahnschrift Condensed", "Roboto Condensed", sans-serif-condensed, "Arial Narrow", system-ui, sans-serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; background: var(--soot); color: var(--ink); }
+body {
+  position: fixed; inset: 0; overflow: hidden;
+  overscroll-behavior: none; touch-action: none;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  font: 15px/1.45 var(--font-body);
+}
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; background: var(--soot); }
+#game:active { cursor: grabbing; }
+
+/* ---------- HUD ---------- */
+.hud {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 8px); padding-bottom: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  pointer-events: none;
+  font: 600 12px/1 var(--font-mono); letter-spacing: 0.08em; color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0));
+}
+.lvl { min-width: 0; white-space: nowrap; }
+.lvl b { color: var(--ink); font-weight: 700; }
+.battery { display: flex; align-items: center; gap: 7px; }
+.battery svg { width: 14px; height: 14px; fill: var(--bolt); flex: none; }
+.battery .cell {
+  position: relative; width: clamp(84px, 28vw, 168px); height: 13px; padding: 2px;
+  border: 1.5px solid rgba(255, 236, 204, 0.42); border-radius: 3px;
+}
+.battery .cell::after {
+  content: ""; position: absolute; right: -5px; top: 3px; width: 3px; height: 4px;
+  background: rgba(255, 236, 204, 0.42); border-radius: 0 1px 1px 0;
+}
+.battery .fill {
+  height: 100%; width: 100%; transform-origin: left center; border-radius: 1px;
+  background: linear-gradient(90deg, #ffae2b, var(--bolt) 55%, var(--beam));
+}
+.battery[data-state="low"] .fill { background: linear-gradient(90deg, #ff7a2a, #ffa53a); }
+.battery[data-state="crit"] .fill { background: var(--ember); animation: pulse 0.8s ease-in-out infinite; }
+.battery[data-state="dead"] .cell { border-color: rgba(255, 91, 61, 0.7); animation: pulse 1.6s ease-in-out infinite; }
+.battery.charged .cell { animation: charge 0.7s ease-out; }
+@keyframes pulse { 50% { opacity: 0.4; } }
+@keyframes charge { from { box-shadow: 0 0 10px 3px rgba(255, 201, 60, 0.85); } to { box-shadow: 0 0 18px 6px rgba(255, 201, 60, 0); } }
+.hud-right { display: flex; align-items: center; gap: 2px; }
+.time { min-width: 4.5ch; margin-right: 4px; text-align: right; color: var(--ink); }
+.icon-btn {
+  pointer-events: auto; width: 38px; height: 38px; display: grid; place-items: center;
+  border: 0; border-radius: 10px; background: transparent; color: var(--ink); cursor: pointer;
+}
+.icon-btn svg { width: 20px; height: 20px; }
+.icon-btn:active { background: rgba(255, 236, 204, 0.1); }
+.icon-btn:focus-visible, .btn:focus-visible { outline: 2px solid var(--bolt); outline-offset: 2px; }
+
+/* ---------- toast ---------- */
+.toast {
+  position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 58px); z-index: 3;
+  max-width: calc(100vw - 32px); padding: 7px 14px; border-radius: 999px;
+  background: rgba(17, 14, 10, 0.84); border: 1px solid var(--line); color: var(--ink);
+  font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; transform: translate(-50%, -6px); transition: opacity 0.25s, transform 0.25s; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- finger drag hint ---------- */
+.hint {
+  position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 8vh); z-index: 2;
+  transform: translateX(-50%); pointer-events: none; text-align: center;
+  color: var(--ink); font-size: 14px; letter-spacing: 0.01em;
+}
+.hint p { margin: 0; text-shadow: 0 1px 6px #000; white-space: nowrap; }
+.hint .pad { position: relative; width: 190px; height: 150px; margin: 0 auto 4px; }
+.hint .base, .hint .tip, .hint .trail, .hint .hand { position: absolute; left: 70px; top: 92px; }
+.hint .base {
+  width: 116px; height: 116px; margin: -58px 0 0 -58px; border-radius: 50%;
+  border: 1.5px solid rgba(255, 236, 204, 0.32); background: rgba(255, 236, 204, 0.04);
+  animation: hint-base 2.6s ease-in-out infinite;
+}
+.hint .trail {
+  width: 57px; height: 3px; margin-top: -1.5px; border-radius: 2px; transform-origin: 0 50%;
+  background: linear-gradient(90deg, rgba(255, 236, 204, 0), rgba(255, 236, 204, 0.65));
+  animation: hint-trail 2.6s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+.hint .tip {
+  width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%;
+  background: rgba(255, 236, 204, 0.3); border: 1.5px solid rgba(255, 236, 204, 0.75);
+  box-shadow: 0 0 18px rgba(255, 220, 160, 0.35);
+  animation: hint-tip 2.6s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+.hint .hand {
+  width: 40px; height: 52px; margin: -6px 0 0 -13px; color: var(--ink);
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.7));
+  animation: hint-tip 2.6s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+@keyframes hint-tip {
+  0%, 6% { transform: translate(0, 0) scale(0.85); opacity: 0; }
+  16% { transform: translate(0, 0) scale(1); opacity: 1; }
+  58%, 74% { transform: translate(48px, -30px); opacity: 1; }
+  90%, 100% { transform: translate(48px, -30px); opacity: 0; }
+}
+@keyframes hint-trail {
+  0%, 16% { transform: rotate(-32deg) scaleX(0); opacity: 1; }
+  58%, 74% { transform: rotate(-32deg) scaleX(1); opacity: 1; }
+  90%, 100% { transform: rotate(-32deg) scaleX(1); opacity: 0; }
+}
+@keyframes hint-base {
+  0%, 6% { transform: scale(0.6); opacity: 0; }
+  16%, 74% { transform: scale(1); opacity: 1; }
+  90%, 100% { transform: scale(1); opacity: 0; }
+}
+
+/* ---------- sheets ---------- */
+.overlay {
+  position: fixed; inset: 0; z-index: 4; display: flex; align-items: flex-end; justify-content: center;
+  pointer-events: none;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 16px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.sheet {
+  pointer-events: auto; width: 100%; max-width: 440px; max-height: 100%; overflow-y: auto; touch-action: pan-y;
+  padding: 22px 22px 16px; border-radius: 20px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.sheet.rise { animation: rise 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes rise { from { transform: translateY(26px); } to { transform: none; } }
+@media (orientation: landscape) and (max-height: 540px) {
+  .overlay { justify-content: flex-end; align-items: center; }
+  .sheet { max-width: 380px; padding: 18px 18px 12px; }
+  .sheet[data-kind="title"] {
+    max-width: 620px; display: grid; column-gap: 22px; align-items: start;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    grid-template-areas: "logo rules" "lede rules" "actions rules" "keys rules";
+  }
+  .sheet[data-kind="title"] .logo { grid-area: logo; font-size: 60px; }
+  .sheet[data-kind="title"] .lede { grid-area: lede; font-size: 14px; }
+  .sheet[data-kind="title"] .actions { grid-area: actions; margin-top: 14px; }
+  .sheet[data-kind="title"] .keys { grid-area: keys; }
+  .sheet[data-kind="title"] .rules { grid-area: rules; align-self: center; margin: 0; padding: 0 0 0 18px; border-top: 0; border-left: 1px solid var(--line); }
+}
+
+.logo {
+  margin: 0; display: flex; flex-direction: column;
+  font-family: var(--font-display); font-stretch: condensed; font-weight: 800;
+  font-size: clamp(56px, 18vw, 88px); line-height: 0.84; letter-spacing: 0.035em; text-transform: uppercase;
+  color: var(--beam);
+  background: radial-gradient(circle at 50% 55%, #fffaf0 0, var(--beam) 10%, #d2b383 21%, #8a7351 36%, #6e5b40 60%) 0 50% / 200% 100% no-repeat, #6e5b40;
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  animation: sweep 7s ease-in-out infinite alternate;
+}
+@keyframes sweep { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+.lede { margin: 12px 0 0; color: var(--ink); font-size: 16px; text-wrap: balance; }
+.rules { list-style: none; margin: 16px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line); display: grid; gap: 11px; }
+.rules li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; color: var(--dim); font-size: 14px; }
+.rules li b { color: var(--ink); font-weight: 600; }
+.rules svg { width: 24px; height: 24px; color: var(--bolt); }
+.eyebrow { margin: 0 0 6px; font: 700 11px/1 var(--font-mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--bolt); }
+.sheet h2 {
+  margin: 0; font-family: var(--font-display); font-stretch: condensed; font-weight: 800;
+  font-size: 40px; line-height: 0.95; letter-spacing: 0.03em; text-transform: uppercase; color: var(--ink); text-wrap: balance;
+}
+.note { margin: 10px 0 0; color: var(--dim); font-size: 14px; }
+.note b { color: var(--ink); font-weight: 600; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 16px 0 0; }
+.stats div { min-width: 0; padding: 10px 8px 9px; border-radius: 10px; background: rgba(255, 236, 204, 0.055); }
+.stats dt { font: 700 10px/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.stats dd { margin: 7px 0 0; font: 600 18px/1 var(--font-mono); color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stats dd small { font-size: 11px; color: var(--dim); }
+.stats .best dd { color: var(--bolt); }
+@media (max-width: 370px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.actions { display: grid; gap: 8px; margin-top: 18px; }
+.btn {
+  appearance: none; -webkit-appearance: none; min-height: 50px; padding: 12px 18px; border-radius: 12px;
+  border: 1px solid var(--line); background: rgba(255, 236, 204, 0.06); color: var(--ink);
+  font: 600 16px/1 var(--font-body); cursor: pointer;
+}
+.btn.primary { background: var(--bolt); color: var(--bolt-ink); border-color: transparent; font-weight: 700; }
+.btn.quiet { min-height: 40px; background: transparent; border-color: transparent; color: var(--dim); font-weight: 500; font-size: 14px; }
+.btn:active { transform: translateY(1px); }
+.keys { margin: 12px 0 0; color: var(--dim); font-size: 12px; text-align: center; }
+@media (pointer: coarse) { .keys { display: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .logo { animation: none; background-position: 65% 50%; }
+  .sheet.rise, .battery .fill, .battery .cell { animation: none !important; }
+  .hint .tip, .hint .hand { animation: none; transform: translate(48px, -30px); }
+  .hint .trail { animation: none; transform: rotate(-32deg); }
+  .hint .base { animation: none; }
+  .toast { transition: none; }
+}
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Maze. Drag anywhere to walk."></canvas>
+
+<header class="hud" id="hud" hidden>
+  <div class="lvl" id="lvl">LV <b>1</b></div>
+  <div class="battery" id="battery" role="meter" aria-label="Flashlight battery" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2 4.5 13.5h6L9.5 22l9-11.5h-6z"/></svg>
+    <div class="cell"><div class="fill" id="batFill"></div></div>
+  </div>
+  <div class="hud-right">
+    <span class="time" id="time" aria-label="Time">0:00</span>
+    <button class="icon-btn" id="btnMute" type="button" aria-label="Mute sound"></button>
+    <button class="icon-btn" id="btnPause" type="button" aria-label="Pause">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="hint" id="hint" hidden aria-hidden="true">
+  <div class="pad">
+    <span class="base"></span>
+    <span class="trail"></span>
+    <span class="tip"></span>
+    <svg class="hand" viewBox="0 0 40 52" aria-hidden="true">
+      <g fill="currentColor">
+        <rect x="9" y="1" width="8" height="28" rx="4"/>
+        <rect x="16" y="16" width="7" height="14" rx="3.5"/>
+        <rect x="22" y="18" width="6.5" height="13" rx="3.25"/>
+        <rect x="27.5" y="21" width="6" height="11" rx="3"/>
+        <rect x="7" y="22" width="26.5" height="26" rx="10"/>
+        <rect x="1.5" y="23" width="7" height="15" rx="3.5" transform="rotate(-28 5 30.5)"/>
+      </g>
+    </svg>
+  </div>
+  <p id="hintText">Drag anywhere to walk</p>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></section>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ------------------------------------------------------------------ tuning
+  const CFG = {
+    wallT: 0.16,          // wall thickness, in cells
+    wallLift: 0.07,       // fake height of the wall tops
+    playerR: 0.145,
+    maxSpeed: 3.1,        // cells per second
+    accel: 14,            // how quickly speed follows the finger
+    turnRate: 11,         // how quickly the beam swings to a new direction
+    assist: 6,            // pull toward corridor centres and nearby openings
+    batterySeconds: 62,   // full charge to dark
+    boltCharge: 0.35,
+    boltEvery: 11,        // one bolt near each stretch of this many cells on the route out
+    pickupR: 0.42,
+    throwMax: 4.4,        // beam reach (cells) on a full battery
+    throwMin: 1.0,        // beam reach just before it dies
+    coneHalf: 0.5,        // radians
+    haloMax: 0.7,
+    afterglow: 0.16,      // seconds for lit areas to fade back to dark
+    lmRes: 16,            // light map pixels per cell
+    floorRes: 4,
+    margin: 5,            // cells of ground drawn around the maze
+    exitGlowR: 1.6,
+    exitGlowI: 0.32,
+    glimmerR: 2.6,        // with the light dead, bolts this close glimmer
+    low: 0.25,
+    crit: 0.15,
+    joyR: 58,             // joystick travel, CSS px
+    joyAim: 5,            // drags shorter than this are ignored
+    joyDead: 14,          // between joyAim and this the beam turns but you stand still
+    cellsOnScreen: 8,
+  };
+
+  const COL = {
+    beam: [255, 236, 204],
+    moon: [150, 192, 255],
+    spark: [255, 214, 120],
+    dawn: [214, 222, 236],
+    floor: [112, 101, 84],
+    ground: [50, 68, 49],
+    wallSide: '#3d362c',
+    wallTop: '#bdb097',
+    bolt: '#ffc93c',
+    boltEdge: '#fff1b8',
+    exit: '#bcdcff',
+    dot: '#f6efe0',
+  };
+
+  // ------------------------------------------------------------------ helpers
+  const TAU = Math.PI * 2;
+  const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0]; // N E S W; wall bit = 1 << dir
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const damp = (rate, dt) => 1 - Math.exp(-rate * dt);
+  const angDiff = (a, b) => { let d = (b - a) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
+  const rgb = (c, i) => { i = clamp(i, 0, 1); return `rgb(${(c[0] * i) | 0},${(c[1] * i) | 0},${(c[2] * i) | 0})`; };
+  const easeOutBack = (t) => { const s = 1.70158; t -= 1; return 1 + (s + 1) * t * t * t + s * t * t; };
+  const fmtTime = (s) => { s = Math.floor(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  const randSeed = () => (Math.random() * 4294967296) >>> 0;
+  function mulberry32(a) {
+    return () => {
+      a |= 0; a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function shuffle(arr, rng) {
+    for (let i = arr.length - 1; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [arr[i], arr[j]] = [arr[j], arr[i]]; }
+    return arr;
+  }
+
+  // ------------------------------------------------------------------ maze
+  // Growing-tree carve: a spanning tree over the grid, so exactly one route joins any two cells.
+  function carveMaze(w, h, rng) {
+    const walls = new Uint8Array(w * h).fill(15), seen = new Uint8Array(w * h);
+    const start = (h >> 1) * w + (w >> 1);
+    const active = [start], order = [0, 1, 2, 3];
+    seen[start] = 1;
+    while (active.length) {
+      const k = rng() < 0.75 ? active.length - 1 : (rng() * active.length) | 0;
+      const c = active[k], cx = c % w, cy = (c / w) | 0;
+      shuffle(order, rng);
+      let carved = false;
+      for (const d of order) {
+        const nx = cx + DX[d], ny = cy + DY[d];
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const nb = ny * w + nx;
+        if (seen[nb]) continue;
+        walls[c] &= ~(1 << d);
+        walls[nb] &= ~(1 << ((d + 2) & 3));
+        seen[nb] = 1; active.push(nb); carved = true;
+        break;
+      }
+      if (!carved) active.splice(k, 1);
+    }
+    return { w, h, walls, start };
+  }
+
+  // Breadth-first search from one or more source cells. root[] says which source each cell hangs off.
+  function bfs(m, sources) {
+    const n = m.w * m.h;
+    const dist = new Int32Array(n).fill(-1), prev = new Int32Array(n).fill(-1), root = new Int32Array(n).fill(-1);
+    const q = new Int32Array(n);
+    let head = 0, tail = 0;
+    sources.forEach((c, i) => { dist[c] = 0; root[c] = i; q[tail++] = c; });
+    while (head < tail) {
+      const c = q[head++], cx = c % m.w, cy = (c / m.w) | 0;
+      for (let d = 0; d < 4; d++) {
+        if (m.walls[c] & (1 << d)) continue;
+        const nx = cx + DX[d], ny = cy + DY[d];
+        if (nx < 0 || ny < 0 || nx >= m.w || ny >= m.h) continue;
+        const nb = ny * m.w + nx;
+        if (dist[nb] >= 0) continue;
+        dist[nb] = dist[c] + 1; prev[nb] = c; root[nb] = root[c];
+        q[tail++] = nb;
+      }
+    }
+    return { dist, prev, root };
+  }
+
+  function openSides(m, c) {
+    const cx = c % m.w, cy = (c / m.w) | 0;
+    let k = 0;
+    for (let d = 0; d < 4; d++) {
+      if (m.walls[c] & (1 << d)) continue;
+      const nx = cx + DX[d], ny = cy + DY[d];
+      if (nx >= 0 && ny >= 0 && nx < m.w && ny < m.h) k++;
+    }
+    return k;
+  }
+
+  function buildLevel(size, seed) {
+    const rng = mulberry32(seed);
+    const m = carveMaze(size, size, rng);
+    m.seed = seed; m.size = size;
+    const { w, h } = m;
+    const fromStart = bfs(m, [m.start]);
+
+    // The only opening in the outer wall, picked among the boundary cells farthest from the start.
+    const sides = [];
+    for (let c = 0; c < w * h; c++) {
+      const x = c % w, y = (c / w) | 0;
+      if (y === 0) sides.push([c, 0]);
+      if (x === w - 1) sides.push([c, 1]);
+      if (y === h - 1) sides.push([c, 2]);
+      if (x === 0) sides.push([c, 3]);
+    }
+    sides.sort((a, b) => fromStart.dist[b[0]] - fromStart.dist[a[0]]);
+    const pool = sides.slice(0, Math.max(1, Math.round(sides.length * 0.25)));
+    const [exitCell, exitSide] = pool[(rng() * pool.length) | 0];
+    m.walls[exitCell] &= ~(1 << exitSide);
+    m.exit = { c: exitCell, x: exitCell % w, y: (exitCell / w) | 0, side: exitSide };
+
+    const path = [];
+    for (let c = exitCell; c !== -1; c = fromStart.prev[c]) path.push(c);
+    path.reverse();
+    m.path = path;
+    m.distFromStart = fromStart.dist;
+    m.bolts = placeBolts(m, rng);
+    m.rects = buildRects(m);
+    return m;
+  }
+
+  // One bolt beside each stretch of the route out (tucked into side branches, preferring dead ends,
+  // so the bolts don't trace the answer), plus a few extra in far dead ends to reward exploring.
+  function placeBolts(m, rng) {
+    const { w, path } = m, n = m.w * m.h;
+    const near = bfs(m, path);
+    const cells = [];
+    const isFree = (c) => {
+      if (c === m.start || c === m.exit.c || m.distFromStart[c] < 3) return false;
+      const x = c % w, y = (c / w) | 0;
+      return cells.every((b) => Math.abs((b % w) - x) + Math.abs(((b / w) | 0) - y) >= 4);
+    };
+    const pick = (cands) => {
+      let total = 0;
+      for (const cw of cands) total += cw[1];
+      let r = rng() * total;
+      for (const cw of cands) { r -= cw[1]; if (r <= 0) return cw[0]; }
+      return cands.length ? cands[cands.length - 1][0] : -1;
+    };
+    const step = CFG.boltEvery;
+    for (let s = step; s < path.length - 2; s += step) {
+      const cands = [];
+      for (let c = 0; c < n; c++) {
+        const a = near.root[c], d = near.dist[c];
+        if (a < s || a >= s + step || d > 5 || !isFree(c)) continue;
+        const dead = openSides(m, c) === 1;
+        cands.push([c, (dead ? 4 : 1) * (d === 0 ? 0.35 : 1 + d * 0.25)]);
+      }
+      const c = pick(cands);
+      if (c >= 0) cells.push(c);
+    }
+    const extras = [];
+    for (let c = 0; c < n; c++) if (near.dist[c] > 3 && openSides(m, c) === 1) extras.push(c);
+    shuffle(extras, rng);
+    let want = Math.round(n / 75);
+    for (const c of extras) {
+      if (want <= 0) break;
+      if (isFree(c)) { cells.push(c); want--; }
+    }
+    return cells.map((c) => ({ c, x: (c % w) + 0.5, y: ((c / w) | 0) + 0.5, taken: false, ph: rng() * TAU }));
+  }
+
+  // Walls as axis-aligned boxes (world units = cells), bucketed by cell for collision lookups.
+  function buildRects(m) {
+    const { w, h, walls } = m, t = CFG.wallT / 2, list = [];
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const v = walls[y * w + x];
+        if (v & 1) list.push([x - t, y - t, x + 1 + t, y + t]);
+        if (v & 8) list.push([x - t, y - t, x + t, y + 1 + t]);
+        if (y === h - 1 && v & 4) list.push([x - t, y + 1 - t, x + 1 + t, y + 1 + t]);
+        if (x === w - 1 && v & 2) list.push([x + 1 - t, y - t, x + 1 + t, y + 1 + t]);
+      }
+    }
+    const gw = w + 2, gh = h + 2, grid = Array.from({ length: gw * gh }, () => []);
+    list.forEach((r, i) => {
+      for (let gy = Math.floor(r[1]); gy <= Math.floor(r[3]); gy++) {
+        for (let gx = Math.floor(r[0]); gx <= Math.floor(r[2]); gx++) {
+          const ix = gx + 1, iy = gy + 1;
+          if (ix >= 0 && iy >= 0 && ix < gw && iy < gh) grid[iy * gw + ix].push(i);
+        }
+      }
+    });
+    return { list, grid, gw, gh };
+  }
+
+  // Render-side resources for a level: wall paths, floor texture, light map.
+  function prepareLevel(m) {
+    const M = CFG.margin, lift = CFG.wallLift;
+    m.wallSide = new Path2D();
+    m.wallTop = new Path2D();
+    for (const r of m.rects.list) {
+      m.wallSide.rect(r[0], r[1], r[2] - r[0], r[3] - r[1]);
+      m.wallTop.rect(r[0], r[1] - lift, r[2] - r[0], r[3] - r[1]);
+    }
+    m.floor = makeFloor(m);
+    const cv = document.createElement('canvas');
+    cv.width = (m.w + 2 * M) * CFG.lmRes;
+    cv.height = (m.h + 2 * M) * CFG.lmRes;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, cv.width, cv.height);
+    m.lm = { cv, g, acc: 0 };
+    const e = m.exit;
+    m.exitGlow = { x: e.x + 0.5 + DX[e.side] * 0.85, y: e.y + 0.5 + DY[e.side] * 0.85 };
+    return m;
+  }
+
+  function makeFloor(m) {
+    const P = CFG.floorRes, M = CFG.margin, cw = m.w + 2 * M, ch = m.h + 2 * M;
+    const cv = document.createElement('canvas');
+    cv.width = cw * P; cv.height = ch * P;
+    const g = cv.getContext('2d'), img = g.createImageData(cv.width, cv.height), d = img.data;
+    const rng = mulberry32(m.seed ^ 0x5bd1e995);
+    const shade = new Float32Array(cw * ch);
+    for (let i = 0; i < shade.length; i++) shade[i] = rng() - 0.5;
+    for (let py = 0; py < cv.height; py++) {
+      for (let px = 0; px < cv.width; px++) {
+        const cx = (px / P) | 0, cy = (py / P) | 0, wx = cx - M, wy = cy - M;
+        const base = wx >= 0 && wy >= 0 && wx < m.w && wy < m.h ? COL.floor : COL.ground;
+        const v = 1 + shade[cy * cw + cx] * 0.14 + (rng() - 0.5) * 0.12;
+        const o = (py * cv.width + px) * 4;
+        d[o] = base[0] * v; d[o + 1] = base[1] * v; d[o + 2] = base[2] * v; d[o + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return cv;
+  }
+
+  // ------------------------------------------------------------------ DOM
+  const $ = (id) => document.getElementById(id);
+  const canvas = $('game'), ctx = canvas.getContext('2d', { alpha: false });
+  const hudEl = $('hud'), lvlEl = $('lvl'), batEl = $('battery'), batFill = $('batFill'), timeEl = $('time');
+  const btnMute = $('btnMute'), btnPause = $('btnPause'), toastEl = $('toast'), hintEl = $('hint'), hintText = $('hintText');
+  const overlay = $('overlay'), sheet = $('sheet');
+  const coarse = matchMedia('(pointer: coarse)').matches;
+
+  const ICON = {
+    bolt: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2 4.5 13.5h6L9.5 22l9-11.5h-6z" fill="currentColor"/></svg>',
+    drag: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="16" r="6" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.4"/><circle cx="8" cy="16" r="3" fill="currentColor"/><path d="M11.5 12.5 19 5m0 0h-4.6M19 5v4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    wall: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12 22 4.5v15z" fill="currentColor" fill-opacity=".3"/><rect x="12.6" y="3" width="2.4" height="18" rx="1" fill="currentColor"/><circle cx="4.5" cy="12" r="2.4" fill="currentColor"/></svg>',
+    sound: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3.5L12 5v14l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    muted: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3.5L12 5v14l-4.5-4H4z" fill="currentColor"/><path d="m15.5 9.5 5 5m0-5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  };
+
+  // ------------------------------------------------------------------ save data (per browser, optional)
+  const SAVE_KEY = 'darkmaze:v1';
+  const save = (() => {
+    const d = { level: 1, best: {}, muted: false, hintSeen: false };
+    try { Object.assign(d, JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); } catch (e) { /* storage unavailable */ }
+    return d;
+  })();
+  const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* storage unavailable */ } };
+
+  // ------------------------------------------------------------------ sound (synthesised, no files)
+  const audio = {
+    ctx: null, out: null, noise: null,
+    unlock() {
+      if (!this.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        try {
+          this.ctx = new AC();
+          this.out = this.ctx.createGain();
+          this.out.gain.value = 0.55;
+          this.out.connect(this.ctx.destination);
+          const b = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate), ch = b.getChannelData(0);
+          for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+          this.noise = b;
+        } catch (e) { this.ctx = null; return; }
+      }
+      if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+    },
+    ok() { return this.ctx && !save.muted && this.ctx.state === 'running'; },
+    tone(f0, f1, dur, type, vol, delay = 0) {
+      if (!this.ok()) return;
+      const c = this.ctx, t = c.currentTime + delay, o = c.createOscillator(), g = c.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t);
+      if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(this.out);
+      o.start(t); o.stop(t + dur + 0.03);
+    },
+    hiss(dur, vol, freq, type, delay = 0) {
+      if (!this.ok()) return;
+      const c = this.ctx, t = c.currentTime + delay, s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+      s.buffer = this.noise; f.type = type; f.frequency.value = freq;
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f); f.connect(g); g.connect(this.out);
+      s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.03);
+    },
+  };
+  const sfx = {
+    pickup() { audio.tone(620, 930, 0.12, 'triangle', 0.22); audio.tone(930, 1400, 0.18, 'triangle', 0.16, 0.07); audio.hiss(0.2, 0.05, 6000, 'highpass', 0.02); },
+    bump(force) { audio.tone(120, 58, 0.13, 'sine', 0.16 + 0.06 * force); audio.hiss(0.07, 0.08, 500, 'lowpass'); },
+    flicker() { audio.hiss(0.03, 0.05, 3500, 'highpass'); },
+    out() { audio.tone(320, 70, 0.6, 'sawtooth', 0.05); audio.hiss(0.05, 0.12, 2500, 'bandpass'); audio.hiss(0.04, 0.08, 2500, 'bandpass', 0.13); },
+    beat() { audio.tone(64, 40, 0.14, 'sine', 0.34); audio.tone(58, 38, 0.16, 'sine', 0.24, 0.19); },
+    win() { [392, 523, 659, 784].forEach((f, i) => audio.tone(f, 0, 0.55, 'triangle', 0.15, i * 0.11)); },
+    click() { audio.tone(900, 600, 0.04, 'square', 0.035); },
+  };
+  const buzz = (p) => { try { if (!save.muted && navigator.vibrate) navigator.vibrate(p); } catch (e) { /* not allowed here */ } };
+
+  // ------------------------------------------------------------------ state
+  const game = {
+    state: 'title', level: 1, t: 0, time: 0, battery: 1, walked: 0, boltsTaken: 0, trail: [],
+    flick: 1, wonT: 0, sheetShown: false, warnedLow: false, fullHint: false, newBest: false,
+  };
+  const fx = { flashes: [], particles: [], flickT: 0, flickM: 1, beatT: 0 };
+  const cam = { x: 0, y: 0, s: 50 };
+  let level = null, player = null;
+  let vw = window.innerWidth, vh = window.innerHeight, dpr = 1;
+
+  function newPlayer(m) {
+    const sx = (m.start % m.w) + 0.5, sy = ((m.start / m.w) | 0) + 0.5;
+    const open = [0, 1, 2, 3].filter((d) => !(m.walls[m.start] & (1 << d)));
+    const d = open[(Math.random() * open.length) | 0] ?? 0;
+    const ang = Math.atan2(DY[d], DX[d]);
+    return { x: sx, y: sy, vx: 0, vy: 0, ang, aim: ang, step: 0, touching: false, lastBump: -1, feelT: 0 };
+  }
+
+  // ------------------------------------------------------------------ input
+  const joy = { id: null, active: false, ox: 0, oy: 0, x: 0, y: 0, kx: 0, ky: 0, vis: 0 };
+  const keys = { up: false, down: false, left: false, right: false };
+  const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right' };
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (game.state !== 'playing' || joy.id !== null) return;
+    e.preventDefault();
+    joy.id = e.pointerId; joy.active = true;
+    joy.ox = joy.x = joy.kx = e.clientX;
+    joy.oy = joy.y = joy.ky = e.clientY;
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ }
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== joy.id) return;
+    joy.x = e.clientX; joy.y = e.clientY;
+    // Drag the base along behind the finger so the stick never runs out of travel.
+    const dx = joy.x - joy.ox, dy = joy.y - joy.oy, d = Math.hypot(dx, dy);
+    if (d > CFG.joyR) { joy.ox = joy.x - (dx / d) * CFG.joyR; joy.oy = joy.y - (dy / d) * CFG.joyR; }
+  });
+  const onRelease = (e) => { if (e.pointerId === joy.id) releaseJoy(); };
+  canvas.addEventListener('pointerup', onRelease);
+  canvas.addEventListener('pointercancel', onRelease);
+  canvas.addEventListener('lostpointercapture', onRelease);
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  function releaseJoy() { joy.id = null; joy.active = false; }
+
+  window.addEventListener('keydown', (e) => {
+    audio.unlock();
+    const k = KEYMAP[e.code];
+    if (k) { keys[k] = true; if (game.state === 'playing') e.preventDefault(); return; }
+    if (e.code === 'Escape' || e.code === 'KeyP') {
+      if (game.state === 'playing') pause(); else if (game.state === 'paused') resume();
+      e.preventDefault();
+    }
+  });
+  window.addEventListener('keyup', (e) => { const k = KEYMAP[e.code]; if (k) keys[k] = false; });
+  window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; releaseJoy(); });
+  window.addEventListener('pointerdown', () => audio.unlock(), { capture: true, passive: true });
+  document.addEventListener('touchmove', (e) => { if (!e.target.closest || !e.target.closest('.sheet')) e.preventDefault(); }, { passive: false });
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+
+  function readInput() {
+    if (joy.active) {
+      const dx = joy.x - joy.ox, dy = joy.y - joy.oy, d = Math.hypot(dx, dy);
+      if (d < CFG.joyAim) return { x: 0, y: 0, mag: 0, aim: null };
+      const mag = clamp((d - CFG.joyDead) / (CFG.joyR - CFG.joyDead), 0, 1);
+      return { x: dx / d, y: dy / d, mag, aim: Math.atan2(dy, dx) };
+    }
+    const kx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), ky = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+    if (kx || ky) { const d = Math.hypot(kx, ky); return { x: kx / d, y: ky / d, mag: 1, aim: Math.atan2(ky, kx) }; }
+    return { x: 0, y: 0, mag: 0, aim: null };
+  }
+
+  function updateJoy(dt) {
+    if (joy.active) {
+      joy.kx = joy.x; joy.ky = joy.y;
+      joy.vis += (1 - joy.vis) * damp(14, dt);
+    } else {
+      const k = damp(16, dt);
+      joy.kx += (joy.ox - joy.kx) * k; joy.ky += (joy.oy - joy.ky) * k;
+      joy.vis += (0 - joy.vis) * damp(7, dt);
+    }
+  }
+
+  // ------------------------------------------------------------------ movement & collision
+  function collide(p, r) {
+    const R = level.rects;
+    let hit = false, nx = 0, ny = 0;
+    for (let iter = 0; iter < 3; iter++) {
+      let any = false;
+      const gx0 = Math.floor(p.x) - 1, gy0 = Math.floor(p.y) - 1;
+      for (let gy = gy0; gy <= gy0 + 2; gy++) {
+        for (let gx = gx0; gx <= gx0 + 2; gx++) {
+          const ix = gx + 1, iy = gy + 1;
+          if (ix < 0 || iy < 0 || ix >= R.gw || iy >= R.gh) continue;
+          for (const i of R.grid[iy * R.gw + ix]) {
+            const b = R.list[i];
+            const qx = clamp(p.x, b[0], b[2]), qy = clamp(p.y, b[1], b[3]);
+            let dx = p.x - qx, dy = p.y - qy;
+            const d2 = dx * dx + dy * dy;
+            if (d2 >= r * r) continue;
+            const d = Math.sqrt(d2);
+            if (d < 1e-6) {
+              // Centre ended up inside a wall: leave along the shortest axis.
+              const opts = [[p.x - b[0], -1, 0], [b[2] - p.x, 1, 0], [p.y - b[1], 0, -1], [b[3] - p.y, 0, 1]];
+              opts.sort((u, v) => u[0] - v[0]);
+              dx = opts[0][1]; dy = opts[0][2];
+              p.x += dx * (opts[0][0] + r); p.y += dy * (opts[0][0] + r);
+            } else {
+              dx /= d; dy /= d;
+              p.x += dx * (r - d); p.y += dy * (r - d);
+            }
+            nx += dx; ny += dy; any = hit = true;
+          }
+        }
+      }
+      if (!any) break;
+    }
+    if (!hit) return null;
+    const l = Math.hypot(nx, ny) || 1;
+    return { nx: nx / l, ny: ny / l };
+  }
+
+  // Thumb-friendly steering: keep to the middle of corridors and slide into an opening that's right there.
+  function assist(pl, inp, dt) {
+    if (inp.mag < 0.05) return;
+    const ax = Math.abs(inp.x), ay = Math.abs(inp.y);
+    const vertical = ay > ax * 1.4, horizontal = ax > ay * 1.4;
+    if (!vertical && !horizontal) return;
+    const m = level, cx = Math.floor(pl.x), cy = Math.floor(pl.y);
+    if (cx < 0 || cy < 0 || cx >= m.w || cy >= m.h) return;
+    const c = cy * m.w + cx;
+    const want = vertical ? (inp.y < 0 ? 0 : 2) : (inp.x > 0 ? 1 : 3);
+    const open = (cell, d) => !(m.walls[cell] & (1 << d));
+    let target = null;
+    if (open(c, want)) target = vertical ? cx + 0.5 : cy + 0.5;
+    else {
+      const f = vertical ? pl.x - cx : pl.y - cy;
+      const side = vertical ? (f > 0.5 ? 1 : 3) : (f > 0.5 ? 2 : 0);
+      const nx = cx + DX[side], ny = cy + DY[side];
+      if (nx >= 0 && ny >= 0 && nx < m.w && ny < m.h && open(c, side) && open(ny * m.w + nx, want)) {
+        target = vertical ? nx + 0.5 : ny + 0.5;
+      }
+    }
+    if (target === null) return;
+    const cur = vertical ? pl.x : pl.y;
+    if (Math.abs(target - cur) > 0.8) return;
+    const k = damp(CFG.assist * inp.mag, dt);
+    if (vertical) pl.x += (target - pl.x) * k; else pl.y += (target - pl.y) * k;
+  }
+
+  function movePlayer(dt, inp) {
+    const pl = player, r = CFG.playerR;
+    if (inp.aim !== null) pl.aim = inp.aim;
+    pl.ang += angDiff(pl.ang, pl.aim) * damp(CFG.turnRate, dt);
+    const k = damp(CFG.accel, dt);
+    pl.vx += (inp.x * inp.mag * CFG.maxSpeed - pl.vx) * k;
+    pl.vy += (inp.y * inp.mag * CFG.maxSpeed - pl.vy) * k;
+    assist(pl, inp, dt);
+
+    const ox = pl.x, oy = pl.y;
+    const steps = Math.max(1, Math.ceil((Math.hypot(pl.vx, pl.vy) * dt) / 0.05));
+    let contact = null;
+    for (let s = 0; s < steps; s++) {
+      pl.x += (pl.vx * dt) / steps;
+      pl.y += (pl.vy * dt) / steps;
+      const c = collide(pl, r);
+      if (c) contact = c;
+    }
+    const moved = Math.hypot(pl.x - ox, pl.y - oy);
+    game.walked += moved;
+    pl.step += moved * 9;
+
+    if (contact) {
+      const into = -(pl.vx * contact.nx + pl.vy * contact.ny);
+      if (into > 0) { pl.vx += contact.nx * into; pl.vy += contact.ny * into; }
+      const cx = pl.x - contact.nx * r, cy = pl.y - contact.ny * r;
+      if (!pl.touching && into > 1.1 && game.t - pl.lastBump > 0.3) {
+        pl.lastBump = game.t;
+        flash(cx, cy, 0.75, 0.5, 0.6);
+        sfx.bump(into / CFG.maxSpeed);
+        buzz(12);
+      }
+      // Feeling along a wall shows a little of it, which is all you get once the light dies.
+      pl.feelT -= dt;
+      if (pl.feelT <= 0 && inp.mag > 0.1) { flash(cx, cy, 0.55, 0.32, 0.45); pl.feelT = 0.12; }
+    }
+    pl.touching = !!contact;
+
+    const last = game.trail[game.trail.length - 1];
+    if (!last || Math.hypot(pl.x - last[0], pl.y - last[1]) > 0.2) game.trail.push([pl.x, pl.y]);
+  }
+
+  // ------------------------------------------------------------------ effects
+  function flash(x, y, r, i, life) { fx.flashes.push({ x, y, r, i, life, max: life }); }
+  function burst(x, y, n, col) {
+    for (let k = 0; k < n; k++) {
+      const a = Math.random() * TAU, sp = 0.8 + Math.random() * 2.2, life = 0.4 + Math.random() * 0.35;
+      fx.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life, max: life, size: 0.03 + Math.random() * 0.04, col });
+    }
+  }
+  function updateFx(dt) {
+    for (let i = fx.flashes.length - 1; i >= 0; i--) {
+      const f = fx.flashes[i];
+      f.life -= dt;
+      if (f.life <= 0) fx.flashes.splice(i, 1);
+    }
+    const k = Math.exp(-3.5 * dt);
+    for (let i = fx.particles.length - 1; i >= 0; i--) {
+      const p = fx.particles[i];
+      p.life -= dt;
+      if (p.life <= 0) { fx.particles.splice(i, 1); continue; }
+      p.vx *= k; p.vy *= k; p.x += p.vx * dt; p.y += p.vy * dt;
+    }
+  }
+
+  let toastTimer = 0;
+  function toast(msg, ms = 2200) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
+  }
+
+  // ------------------------------------------------------------------ flashlight
+  function lightParams() {
+    if (game.state === 'title') return { I: 1, reach: CFG.throwMax, half: CFG.coneHalf, halo: CFG.haloMax };
+    const b = game.battery;
+    if (b <= 0) return { I: 0, reach: 0, half: CFG.coneHalf, halo: 0 };
+    const fade = smooth(0, 0.05, b); // the last few percent sputter out
+    return {
+      I: fade * (0.4 + 0.6 * Math.pow(b, 0.6)) * game.flick,
+      reach: (CFG.throwMin + (CFG.throwMax - CFG.throwMin) * Math.pow(b, 0.8)) * (0.7 + 0.3 * fade),
+      half: CFG.coneHalf * (0.85 + 0.15 * b),
+      halo: CFG.haloMax * (0.55 + 0.45 * b) * fade,
+    };
+  }
+
+  const BEAM_BACK = 0.22; // the beam starts a little behind the dot so it is wide where you stand
+  // Angular profile of the beam: [edge offset as a multiple of the half-angle, brightness].
+  const BEAM_EDGE = [[1.4, 0], [1.15, 0.2], [0.9, 0.62], [0.55, 1]];
+  const coneBuf = document.createElement('canvas'), coneG = coneBuf.getContext('2d');
+  function beamGradient(g, x, y, r, I, col) {
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, rgb(col, I));
+    grd.addColorStop(0.4, rgb(col, I * 0.85));
+    grd.addColorStop(0.75, rgb(col, I * 0.4));
+    grd.addColorStop(1, '#000');
+    return grd;
+  }
+  function cone(g, x, y, ang, half, r, I, col) {
+    if (!coneG.createConicGradient) {
+      // Older browsers: stack a few wedges instead.
+      for (let k = 0; k < BEAM_EDGE.length; k++) {
+        const hm = BEAM_EDGE[k][0], im = (BEAM_EDGE[k + 1] || BEAM_EDGE[k])[1];
+        g.fillStyle = beamGradient(g, x, y, r, I * im, col);
+        g.beginPath(); g.moveTo(x, y); g.arc(x, y, r, ang - half * hm, ang + half * hm); g.closePath(); g.fill();
+      }
+      return;
+    }
+    // Radial falloff times angular falloff, built in a scratch canvas, then merged into the light map.
+    const size = Math.ceil(r) * 2 + 2, c = size / 2;
+    if (coneBuf.width < size) coneBuf.width = coneBuf.height = size;
+    coneG.globalCompositeOperation = 'source-over';
+    coneG.fillStyle = beamGradient(coneG, c, c, r, I, col);
+    coneG.fillRect(0, 0, size, size);
+    const ag = coneG.createConicGradient(ang - Math.PI, c, c);
+    ag.addColorStop(0, '#000');
+    for (const [hm, v] of BEAM_EDGE) ag.addColorStop(0.5 - (half * hm) / TAU, rgb([255, 255, 255], v));
+    for (let k = BEAM_EDGE.length - 1; k >= 0; k--) ag.addColorStop(0.5 + (half * BEAM_EDGE[k][0]) / TAU, rgb([255, 255, 255], BEAM_EDGE[k][1]));
+    ag.addColorStop(1, '#000');
+    coneG.globalCompositeOperation = 'multiply';
+    coneG.fillStyle = ag;
+    coneG.fillRect(0, 0, size, size);
+    g.drawImage(coneBuf, 0, 0, size, size, x - c, y - c, size, size);
+  }
+  function glow(g, x, y, r, I, col) {
+    if (I <= 0.003 || r <= 0) return;
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, rgb(col, I));
+    grd.addColorStop(0.5, rgb(col, I * 0.45));
+    grd.addColorStop(1, '#000');
+    g.fillStyle = grd;
+    g.fillRect(x - r, y - r, 2 * r, 2 * r);
+  }
+
+  // The light map is a small world-space greyscale image: everything is drawn fully lit, then multiplied by it.
+  // Walls never block it, which is what lets the beam show you what's on the other side.
+  const DECAY_STEP = 1 / 30;
+  function paintLight(dt, lp) {
+    const L = level.lm, g = L.g, res = CFG.lmRes, M = CFG.margin, pl = player;
+    const X = (v) => (v + M) * res;
+    L.acc += dt;
+    if (L.acc >= DECAY_STEP) {
+      const n = Math.min(10, Math.floor(L.acc / DECAY_STEP));
+      L.acc -= n * DECAY_STEP;
+      const v = Math.round(255 * Math.exp((-n * DECAY_STEP) / CFG.afterglow));
+      g.globalCompositeOperation = 'multiply';
+      g.fillStyle = `rgb(${v},${v},${v})`;
+      g.fillRect(0, 0, L.cv.width, L.cv.height);
+      // Multiplying in 8 bits gets stuck a few levels above black, which would leave a faint map of
+      // everywhere you've been. Colour-burn with near-white subtracts a sliver and floors it at zero.
+      g.globalCompositeOperation = 'color-burn';
+      g.fillStyle = 'rgb(247,247,247)';
+      g.fillRect(0, 0, L.cv.width, L.cv.height);
+    }
+    g.globalCompositeOperation = 'lighten';
+    if (lp.I > 0.003) {
+      const ox = pl.x - Math.cos(pl.ang) * BEAM_BACK, oy = pl.y - Math.sin(pl.ang) * BEAM_BACK;
+      cone(g, X(ox), X(oy), pl.ang, lp.half, (lp.reach + BEAM_BACK) * res, lp.I, COL.beam);
+      glow(g, X(pl.x), X(pl.y), lp.halo * res, lp.I * 0.55, COL.beam);
+    }
+    glow(g, X(level.exitGlow.x), X(level.exitGlow.y), CFG.exitGlowR * res, CFG.exitGlowI, COL.moon);
+    for (const f of fx.flashes) glow(g, X(f.x), X(f.y), f.r * res, f.i * (f.life / f.max), COL.beam);
+    if (game.battery <= 0 && game.state === 'playing') {
+      for (const b of level.bolts) {
+        const v = glimmer(b);
+        if (v > 0) glow(g, X(b.x), X(b.y), 0.5 * res, v, COL.spark);
+      }
+    }
+    if (game.state === 'won') {
+      const v = smooth(0.1, 1.5, game.wonT);
+      if (v > 0) {
+        g.fillStyle = rgb(COL.dawn, v);
+        g.fillRect((M - 0.6) * res, (M - 0.6) * res, (level.w + 1.2) * res, (level.h + 1.2) * res);
+      }
+    }
+  }
+
+  function glimmer(b) {
+    if (b.taken) return 0;
+    const d = Math.hypot(b.x - player.x, b.y - player.y);
+    if (d > CFG.glimmerR) return 0;
+    return 0.55 * (0.5 + 0.5 * Math.sin(game.t * 3.2 + b.ph)) * (1 - d / CFG.glimmerR);
+  }
+
+  // Analytic copy of the beam, used to decide which bolts get a sparkle on top.
+  function litAt(x, y, lp) {
+    if (lp.I <= 0.003) return 0;
+    const pl = player, ox = pl.x - Math.cos(pl.ang) * BEAM_BACK, oy = pl.y - Math.sin(pl.ang) * BEAM_BACK;
+    const dx = x - ox, dy = y - oy, d = Math.hypot(dx, dy), reach = lp.reach + BEAM_BACK;
+    let v = 0;
+    if (d < reach) {
+      const a = Math.abs(angDiff(pl.ang, Math.atan2(dy, dx))), lim = lp.half * 1.1;
+      if (a < lim) v = (1 - d / reach) * (1 - (a / lim) * 0.5);
+    }
+    const dh = Math.hypot(x - pl.x, y - pl.y);
+    if (dh < lp.halo) v = Math.max(v, 0.5 * (1 - dh / lp.halo));
+    return v * lp.I;
+  }
+
+  // ------------------------------------------------------------------ game flow
+  const sizeFor = (n) => Math.min(9 + 2 * n, 41);
+
+  function startLevel(n, seed = randSeed()) {
+    const size = sizeFor(n);
+    level = prepareLevel(buildLevel(size, seed));
+    player = newPlayer(level);
+    Object.assign(game, {
+      state: 'playing', level: n, time: 0, battery: 1, walked: 0, boltsTaken: 0, trail: [],
+      flick: 1, wonT: 0, sheetShown: false, warnedLow: false, fullHint: false, newBest: false,
+    });
+    fx.flashes.length = 0; fx.particles.length = 0; fx.flickT = 0; fx.beatT = 0;
+    releaseJoy();
+    hideSheet();
+    hudEl.hidden = false;
+    lvlEl.innerHTML = `LV <b>${n}</b>`;
+    hud.lastB = -1; hud.lastSec = -1;
+    save.level = n; persist();
+    if (!save.hintSeen) {
+      hintText.textContent = coarse ? 'Drag anywhere to walk' : 'Drag with the mouse, or use WASD / arrow keys';
+      hintEl.hidden = false;
+    }
+    updateCamera(0, lightParams(), true);
+    toast(`Level ${n} · ${size} × ${size}`);
+  }
+
+  function goTitle() {
+    level = prepareLevel(buildLevel(13, randSeed()));
+    player = newPlayer(level);
+    Object.assign(game, { state: 'title', battery: 1, flick: 1 });
+    fx.flashes.length = 0; fx.particles.length = 0;
+    releaseJoy();
+    hudEl.hidden = true; hintEl.hidden = true;
+    screenTitle();
+    updateCamera(0, lightParams(), true);
+  }
+
+  function pause() {
+    if (game.state !== 'playing') return;
+    game.state = 'paused';
+    releaseJoy();
+    screenPause();
+  }
+  function resume() {
+    if (game.state !== 'paused') return;
+    game.state = 'playing';
+    hideSheet();
+  }
+
+  function win() {
+    game.state = 'won'; game.wonT = 0; game.sheetShown = false;
+    player.vx = player.vy = 0;
+    releaseJoy();
+    hudEl.hidden = true; hintEl.hidden = true;
+    const n = game.level, prev = save.best[n];
+    game.newBest = prev == null || game.time < prev;
+    if (game.newBest) save.best[n] = game.time;
+    save.level = n + 1;
+    persist();
+    sfx.win(); buzz([30, 60, 30]);
+  }
+
+  function pickUp(b) {
+    b.taken = true;
+    game.boltsTaken++;
+    const wasDark = game.battery <= 0, before = game.battery;
+    game.battery = Math.min(1, game.battery + CFG.boltCharge);
+    if (game.battery > CFG.low + 0.05) game.warnedLow = false;
+    fx.flickT = 0; game.flick = 1;
+    burst(b.x, b.y, 16, COL.spark);
+    flash(b.x, b.y, 1.5, 0.9, 0.6);
+    sfx.pickup(); buzz(20);
+    batEl.classList.remove('charged'); void batEl.offsetWidth; batEl.classList.add('charged');
+    toast(wasDark ? 'Light’s back' : `+${Math.round((game.battery - before) * 100)}% battery`, 1400);
+  }
+
+  function updatePlaying(dt) {
+    game.time += dt;
+    const inp = readInput();
+    if (inp.mag > 0.3 && !hintEl.hidden) { hintEl.hidden = true; save.hintSeen = true; persist(); }
+    movePlayer(dt, inp);
+
+    for (const b of level.bolts) {
+      if (b.taken || Math.hypot(b.x - player.x, b.y - player.y) > CFG.pickupR) continue;
+      if (game.battery > 0.97) {
+        if (!game.fullHint) { game.fullHint = true; toast('Battery full. Come back for this one.'); }
+        continue;
+      }
+      pickUp(b);
+    }
+
+    if (game.battery > 0) {
+      game.battery = Math.max(0, game.battery - dt / CFG.batterySeconds);
+      if (game.battery <= CFG.low && !game.warnedLow) { game.warnedLow = true; toast('Battery low'); }
+      if (game.battery === 0) {
+        sfx.out(); buzz(70);
+        toast('Your light is dead. Feel along the walls.', 3200);
+      }
+    }
+
+    // Flicker as the battery gives out.
+    game.flick = 1;
+    if (game.battery > 0 && game.battery < CFG.crit) {
+      const sev = 1 - game.battery / CFG.crit;
+      if (fx.flickT > 0) { fx.flickT -= dt; game.flick = fx.flickM; }
+      else if (Math.random() < (0.5 + 4 * sev) * dt) {
+        fx.flickT = 0.04 + Math.random() * 0.14;
+        fx.flickM = 0.1 + Math.random() * 0.55;
+        sfx.flicker();
+      }
+    }
+    if (game.battery < 0.12) {
+      fx.beatT -= dt;
+      if (fx.beatT <= 0) { sfx.beat(); fx.beatT = game.battery > 0 ? 0.85 : 1.15; }
+    }
+
+    const m = level, out = 0.3;
+    if (player.x < -out || player.y < -out || player.x > m.w + out || player.y > m.h + out) win();
+  }
+
+  // ------------------------------------------------------------------ sheets
+  function showSheet(html, kind) {
+    sheet.innerHTML = html;
+    sheet.dataset.kind = kind;
+    overlay.hidden = false;
+    sheet.scrollTop = 0;
+    sheet.classList.remove('rise'); void sheet.offsetWidth; sheet.classList.add('rise');
+    const primary = sheet.querySelector('.btn.primary');
+    if (primary && !coarse) primary.focus({ preventScroll: true });
+  }
+  function hideSheet() { overlay.hidden = true; sheet.innerHTML = ''; }
+
+  function screenTitle() {
+    const lvl = save.level || 1;
+    showSheet(`
+      <h1 class="logo" id="sheetTitle" aria-label="Dark Maze"><span>Dark</span><span>Maze</span></h1>
+      <p class="lede">A small dot, a dying flashlight, and one way out.</p>
+      <ul class="rules">
+        <li>${ICON.drag}<span><b>Drag anywhere</b> to walk. Your light points the way you drag.</span></li>
+        <li>${ICON.bolt}<span>The beam dims and shortens until it dies. <b>Grab bolts</b> to recharge.</span></li>
+        <li>${ICON.wall}<span>Light shines through walls, but you can’t. <b>Only one path</b> leads out.</span></li>
+      </ul>
+      <div class="actions">
+        <button class="btn primary" type="button" data-action="play">${lvl > 1 ? `Continue · Level ${lvl}` : 'Start'}</button>
+        ${lvl > 1 ? '<button class="btn quiet" type="button" data-action="fresh">Start over at level 1</button>' : ''}
+      </div>
+      <p class="keys">Mouse drag or WASD / arrow keys · P pauses</p>`, 'title');
+  }
+
+  function screenPause() {
+    showSheet(`
+      <p class="eyebrow">Level ${game.level} · ${level.w} × ${level.h}</p>
+      <h2 id="sheetTitle">Paused</h2>
+      <p class="note">Battery <b>${Math.round(game.battery * 100)}%</b> · ${fmtTime(game.time)} in the dark</p>
+      <div class="actions">
+        <button class="btn primary" type="button" data-action="resume">Resume</button>
+        <button class="btn" type="button" data-action="retry">Restart this maze</button>
+        <button class="btn" type="button" data-action="reroll">Try a different maze</button>
+        <button class="btn quiet" type="button" data-action="menu">Main menu</button>
+      </div>`, 'pause');
+  }
+
+  function screenWin() {
+    const n = game.level, best = save.best[n];
+    showSheet(`
+      <p class="eyebrow">Level ${n} cleared · ${level.w} × ${level.h}</p>
+      <h2 id="sheetTitle">You got out</h2>
+      <dl class="stats">
+        <div><dt>Time</dt><dd>${fmtTime(game.time)}</dd></div>
+        <div class="${game.newBest ? 'best' : ''}"><dt>Best</dt><dd>${fmtTime(best ?? game.time)}</dd></div>
+        <div><dt>Bolts</dt><dd>${game.boltsTaken}<small>/${level.bolts.length}</small></dd></div>
+        <div><dt>Walked</dt><dd>${Math.round(game.walked)}<small> cells</small></dd></div>
+      </dl>
+      <p class="note">${game.newBest ? '<b>New best for this level.</b> ' : ''}The shortest way out was <b>${level.path.length} cells</b>. Your route is traced in gold.</p>
+      <div class="actions">
+        <button class="btn primary" type="button" data-action="next">Level ${n + 1} · ${sizeFor(n + 1)} × ${sizeFor(n + 1)}</button>
+        <button class="btn quiet" type="button" data-action="menu">Main menu</button>
+      </div>`, 'win');
+  }
+
+  const ACTIONS = {
+    play: () => startLevel(save.level || 1),
+    fresh: () => { save.level = 1; persist(); startLevel(1); },
+    resume: () => resume(),
+    retry: () => startLevel(game.level, level.seed),
+    reroll: () => startLevel(game.level),
+    next: () => startLevel(game.level + 1),
+    menu: () => goTitle(),
+  };
+  overlay.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-action]');
+    if (!b || !ACTIONS[b.dataset.action]) return;
+    audio.unlock(); sfx.click();
+    ACTIONS[b.dataset.action]();
+  });
+
+  function syncMute() {
+    btnMute.innerHTML = save.muted ? ICON.muted : ICON.sound;
+    btnMute.setAttribute('aria-label', save.muted ? 'Turn sound on' : 'Mute sound');
+    btnMute.setAttribute('aria-pressed', String(save.muted));
+  }
+  btnMute.addEventListener('click', () => { save.muted = !save.muted; persist(); syncMute(); audio.unlock(); });
+  btnPause.addEventListener('click', () => pause());
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+
+  // ------------------------------------------------------------------ HUD
+  const hud = { lastB: -1, lastState: '', lastSec: -1, lastPct: -1 };
+  function updateHud() {
+    if (hudEl.hidden) return;
+    const b = game.battery;
+    if (Math.abs(b - hud.lastB) > 0.002) { batFill.style.transform = `scaleX(${b})`; hud.lastB = b; }
+    const st = b <= 0 ? 'dead' : b < CFG.crit ? 'crit' : b < CFG.low ? 'low' : '';
+    if (st !== hud.lastState) { batEl.dataset.state = st; hud.lastState = st; }
+    const pct = Math.round(b * 20) * 5;
+    if (pct !== hud.lastPct) { batEl.setAttribute('aria-valuenow', String(pct)); hud.lastPct = pct; }
+    const sec = Math.floor(game.time);
+    if (sec !== hud.lastSec) { timeEl.textContent = fmtTime(sec); hud.lastSec = sec; }
+  }
+
+  // ------------------------------------------------------------------ camera
+  const baseScale = () => clamp(Math.min(vw, vh) / CFG.cellsOnScreen, 30, 84);
+
+  // The part of the screen not covered by the HUD or a sheet; the camera centres on it.
+  function freeRect() {
+    let t = 0, r = vw, b = vh;
+    if (!hudEl.hidden) t = hudEl.getBoundingClientRect().bottom;
+    if (!overlay.hidden) {
+      // Keep whichever uncovered region is bigger: beside the sheet or above it.
+      const s = sheet.getBoundingClientRect();
+      if (s.left * vh > vw * s.top) r = s.left; else b = s.top;
+    }
+    return { l: 0, t, r, b };
+  }
+
+  function updateCamera(dt, lp, snap) {
+    const fr = freeRect(), fw = fr.r - fr.l, fh = fr.b - fr.t;
+    let ts, tx, ty;
+    if (game.state === 'won') {
+      ts = clamp(Math.min((fw - 24) / (level.w + 0.8), (fh - 24) / (level.h + 0.8)), 3, baseScale());
+      tx = level.w / 2; ty = level.h / 2;
+    } else {
+      ts = baseScale();
+      const look = 0.8 * (lp.reach / CFG.throwMax);
+      tx = player.x + Math.cos(player.ang) * look;
+      ty = player.y + Math.sin(player.ang) * look;
+    }
+    tx -= ((fr.l + fr.r) / 2 - vw / 2) / ts;
+    ty -= ((fr.t + fr.b) / 2 - vh / 2) / ts;
+    if (snap) { cam.x = tx; cam.y = ty; cam.s = ts; return; }
+    const k = damp(game.state === 'won' ? 2.2 : 5, dt);
+    cam.s += (ts - cam.s) * k; cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k;
+  }
+
+  // ------------------------------------------------------------------ drawing
+  const BOLT = new Path2D('M0.12 -0.5 L-0.28 0.06 L-0.02 0.06 L-0.12 0.5 L0.28 -0.1 L0.02 -0.1 Z');
+
+  function drawExit(c) {
+    const e = level.exit;
+    c.save();
+    c.translate(e.x + 0.5, e.y + 0.5);
+    c.rotate(Math.atan2(DY[e.side], DX[e.side]));
+    c.strokeStyle = COL.exit; c.lineWidth = 0.06; c.lineCap = 'round'; c.lineJoin = 'round';
+    for (let k = 0; k < 3; k++) {
+      const o = -0.22 + k * 0.32;
+      c.globalAlpha = 0.35 + k * 0.25;
+      c.beginPath(); c.moveTo(o - 0.1, -0.15); c.lineTo(o + 0.05, 0); c.lineTo(o - 0.1, 0.15); c.stroke();
+    }
+    c.restore();
+  }
+
+  function drawBolts(c) {
+    c.lineJoin = 'round';
+    for (const b of level.bolts) {
+      if (b.taken) continue;
+      const bob = Math.sin(game.t * 2.6 + b.ph) * 0.035;
+      c.fillStyle = 'rgba(255, 201, 60, 0.2)';
+      c.beginPath(); c.ellipse(b.x, b.y + 0.22, 0.2, 0.065, 0, 0, TAU); c.fill();
+      c.save();
+      c.translate(b.x, b.y + bob - 0.03);
+      c.rotate(Math.sin(game.t * 1.3 + b.ph) * 0.12);
+      c.scale(0.42, 0.42);
+      c.fillStyle = COL.bolt; c.fill(BOLT);
+      c.lineWidth = 0.07; c.strokeStyle = COL.boltEdge; c.stroke(BOLT);
+      c.restore();
+    }
+  }
+
+  function sparkle(c, x, y, r, a) {
+    c.fillStyle = `rgba(255, 244, 214, ${clamp(a, 0, 1)})`;
+    c.beginPath();
+    c.moveTo(x, y - r);
+    c.quadraticCurveTo(x, y, x + r, y); c.quadraticCurveTo(x, y, x, y + r);
+    c.quadraticCurveTo(x, y, x - r, y); c.quadraticCurveTo(x, y, x, y - r);
+    c.fill();
+  }
+
+  function drawBoltGlints(c, lp) {
+    c.globalCompositeOperation = 'lighter';
+    const dark = game.battery <= 0 && game.state === 'playing';
+    for (const b of level.bolts) {
+      if (b.taken) continue;
+      let v = litAt(b.x, b.y, lp);
+      if (dark) v = Math.max(v, glimmer(b));
+      if (v < 0.05) continue;
+      const tw = 0.6 + 0.4 * Math.sin(game.t * 5 + b.ph * 3);
+      sparkle(c, b.x + 0.11, b.y - 0.17, 0.13 * tw, v * 1.4 * tw);
+    }
+    c.globalCompositeOperation = 'source-over';
+  }
+
+  function drawParticles(c) {
+    if (!fx.particles.length) return;
+    c.globalCompositeOperation = 'lighter';
+    for (const p of fx.particles) {
+      const a = clamp(p.life / p.max, 0, 1);
+      c.fillStyle = `rgba(${p.col[0]},${p.col[1]},${p.col[2]},${a})`;
+      c.beginPath(); c.arc(p.x, p.y, p.size * (0.4 + 0.6 * a), 0, TAU); c.fill();
+    }
+    c.globalCompositeOperation = 'source-over';
+  }
+
+  function drawTrail(c) {
+    const T = game.trail, n = Math.floor(T.length * smooth(0.3, 2.2, game.wonT));
+    if (n < 2) return;
+    c.beginPath(); c.moveTo(T[0][0], T[0][1]);
+    for (let i = 1; i < n; i++) c.lineTo(T[i][0], T[i][1]);
+    c.lineWidth = Math.max(0.06, 2.5 / cam.s); c.lineJoin = 'round'; c.lineCap = 'round';
+    c.strokeStyle = 'rgba(255, 201, 60, 0.85)'; c.stroke();
+    const s = level.start;
+    c.beginPath(); c.arc((s % level.w) + 0.5, ((s / level.w) | 0) + 0.5, Math.max(0.14, 4 / cam.s), 0, TAU);
+    c.lineWidth = Math.max(0.04, 1.5 / cam.s); c.strokeStyle = 'rgba(255, 236, 204, 0.9)'; c.stroke();
+  }
+
+  function drawPlayer(c, lp) {
+    const pl = player, r = Math.max(CFG.playerR, 3 / cam.s);
+    const speed = Math.hypot(pl.vx, pl.vy) / CFG.maxSpeed;
+    const s = 1 + Math.sin(pl.step) * 0.07 * speed;
+    const aura = 0.1 + 0.25 * lp.I;
+    const grd = c.createRadialGradient(pl.x, pl.y, 0, pl.x, pl.y, 0.5);
+    grd.addColorStop(0, `rgba(255, 236, 204, ${aura})`);
+    grd.addColorStop(1, 'rgba(255, 236, 204, 0)');
+    c.fillStyle = grd;
+    c.beginPath(); c.arc(pl.x, pl.y, 0.5, 0, TAU); c.fill();
+    // the flashlight in its hand
+    c.save();
+    c.translate(pl.x, pl.y); c.rotate(pl.ang);
+    c.fillStyle = '#2b2722'; c.fillRect(r * 0.4, -0.05, 0.24, 0.1);
+    c.fillStyle = '#6d665b'; c.fillRect(r * 0.4, -0.05, 0.24, 0.03);
+    c.fillStyle = lp.I > 0.02 ? `rgba(255, 244, 214, ${0.45 + 0.55 * lp.I})` : '#4a453d';
+    c.fillRect(r * 0.4 + 0.22, -0.062, 0.04, 0.124);
+    c.restore();
+    // the dot
+    c.beginPath(); c.arc(pl.x, pl.y, r * s, 0, TAU);
+    c.fillStyle = COL.dot; c.fill();
+    c.lineWidth = 0.025; c.strokeStyle = 'rgba(0, 0, 0, 0.45)'; c.stroke();
+  }
+
+  function drawJoystick(c) {
+    if (joy.vis < 0.01) return;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const e = easeOutBack(clamp(joy.vis, 0, 1)), R = CFG.joyR * e;
+    c.globalAlpha = clamp(joy.vis, 0, 1);
+    c.beginPath(); c.arc(joy.ox, joy.oy, R, 0, TAU);
+    c.fillStyle = 'rgba(255, 236, 204, 0.05)'; c.fill();
+    c.lineWidth = 1.5; c.strokeStyle = 'rgba(255, 236, 204, 0.28)'; c.stroke();
+    const dx = joy.kx - joy.ox, dy = joy.ky - joy.oy, d = Math.hypot(dx, dy);
+    if (d > CFG.joyAim) {
+      const a = Math.atan2(dy, dx);
+      c.beginPath(); c.arc(joy.ox, joy.oy, R, a - 0.35, a + 0.35);
+      c.lineWidth = 3; c.lineCap = 'round'; c.strokeStyle = 'rgba(255, 236, 204, 0.6)'; c.stroke();
+      c.beginPath(); c.moveTo(joy.ox, joy.oy); c.lineTo(joy.kx, joy.ky);
+      c.lineWidth = 2; c.strokeStyle = 'rgba(255, 236, 204, 0.16)'; c.stroke();
+    }
+    c.beginPath(); c.arc(joy.kx, joy.ky, 22 * e, 0, TAU);
+    c.fillStyle = 'rgba(255, 236, 204, 0.22)'; c.fill();
+    c.lineWidth = 1.5; c.strokeStyle = 'rgba(255, 236, 204, 0.5)'; c.stroke();
+    c.globalAlpha = 1;
+  }
+
+  function render(lp) {
+    const c = ctx, M = CFG.margin;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1;
+    c.fillStyle = '#000'; c.fillRect(0, 0, canvas.width, canvas.height);
+    const k = cam.s * dpr;
+    c.setTransform(k, 0, 0, k, canvas.width / 2 - cam.x * k, canvas.height / 2 - cam.y * k);
+    c.imageSmoothingEnabled = true;
+    // 1. the world, fully lit
+    c.drawImage(level.floor, -M, -M, level.w + 2 * M, level.h + 2 * M);
+    drawExit(c);
+    c.fillStyle = COL.wallSide; c.fill(level.wallSide);
+    c.fillStyle = COL.wallTop; c.fill(level.wallTop);
+    drawBolts(c);
+    // 2. multiplied by the light
+    c.globalCompositeOperation = 'multiply';
+    c.drawImage(level.lm.cv, -M, -M, level.w + 2 * M, level.h + 2 * M);
+    c.globalCompositeOperation = 'source-over';
+    // 3. things that shine on their own
+    if (game.state === 'won') drawTrail(c);
+    drawBoltGlints(c, lp);
+    drawParticles(c);
+    drawPlayer(c, lp);
+    drawJoystick(c);
+  }
+
+  // ------------------------------------------------------------------ loop
+  function resize() {
+    vw = window.innerWidth; vh = window.innerHeight;
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+  }
+  window.addEventListener('resize', resize);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+
+  let lastT = performance.now();
+  function frame(now) {
+    const dt = clamp((now - lastT) / 1000, 0, 0.05);
+    lastT = now;
+    tick(dt);
+    requestAnimationFrame(frame);
+  }
+
+  function tick(dt) {
+    if (!level) return;
+    game.t += dt;
+    if (game.state === 'playing') updatePlaying(dt);
+    else if (game.state === 'title') { player.ang += dt * 0.45; player.aim = player.ang; }
+    else if (game.state === 'won') {
+      game.wonT += dt;
+      if (!game.sheetShown && game.wonT > 1.7) { game.sheetShown = true; screenWin(); }
+    }
+    updateFx(dt);
+    updateJoy(dt);
+    const lp = lightParams();
+    paintLight(dt, lp);
+    updateCamera(dt, lp, false);
+    render(lp);
+    updateHud();
+  }
+
+  // ------------------------------------------------------------------ boot
+  // Keep a game in progress across a live reload of the page.
+  function snapshot() {
+    if (!level || (game.state !== 'playing' && game.state !== 'paused')) return null;
+    return {
+      level: game.level, seed: level.seed, x: player.x, y: player.y, ang: player.ang,
+      battery: game.battery, time: game.time, walked: game.walked, taken: level.bolts.map((b) => b.taken),
+    };
+  }
+
+  function start(data) {
+    resize();
+    syncMute();
+    if (data && data.seed != null && data.level) {
+      startLevel(data.level, data.seed);
+      Object.assign(player, { x: data.x, y: data.y, ang: data.ang, aim: data.ang });
+      Object.assign(game, { battery: data.battery, time: data.time, walked: data.walked || 0 });
+      (data.taken || []).forEach((t, i) => { if (level.bolts[i]) level.bolts[i].taken = t; });
+      game.boltsTaken = level.bolts.filter((b) => b.taken).length;
+      updateCamera(0, lightParams(), true);
+      pause();
+    } else {
+      goTitle();
+    }
+    lastT = performance.now();
+    requestAnimationFrame(frame);
+  }
+
+  // Hooks for automated tests and tinkering from the console.
+  window.DarkMaze = {
+    CFG, buildLevel, startLevel, goTitle, pause, resume,
+    get game() { return game; }, get level() { return level; }, get player() { return player; },
+  };
+
+  const hot = window.claude && window.claude.hot;
+  if (hot && typeof hot.snapshot === 'function') hot.snapshot(snapshot);
+  if (hot && typeof hot.ready === 'function') hot.ready(start);
+  else start((hot && hot.data) || {});
+})();
+</script>
+</body>
+</html>
