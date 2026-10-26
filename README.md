@@ -6,7 +6,7 @@ Open `index.html` in any modern browser, on a phone or a computer. The game is o
 
 ## How to play
 
-- **Drag anywhere** on the screen to walk. A joystick ring appears under your finger, and the dot walks the way you drag. Drag a short way to turn the light without moving; drag further to walk faster.
+- **Drag anywhere** on the screen to walk. The dot walks the way you drag. Drag a short way to turn the light without moving; drag further to walk faster. For your first few seconds of walking, a joystick ring under your finger shows how the drag steers. After that it stays hidden.
 - **The flashlight dims and its reach shrinks** over about a minute. Near the end it flickers and you hear a heartbeat. Then it goes out.
 - **Lightning bolts** recharge 35% of the battery. Walking over one with a full battery leaves it there for later.
 - **The light shines through walls**, so you can see what's on the other side. You can't walk through them.

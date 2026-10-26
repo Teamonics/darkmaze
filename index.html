@@ -297,6 +297,7 @@ body {
     joyR: 58,             // joystick travel, CSS px
     joyAim: 5,            // drags shorter than this are ignored
     joyDead: 14,          // between joyAim and this the beam turns but you stand still
+    joyTeach: 6,          // seconds of walking with the joystick drawn; after that it stays invisible
     cellsOnScreen: 8,
   };
 
@@ -558,7 +559,7 @@ body {
   // ------------------------------------------------------------------ save data (per browser, optional)
   const SAVE_KEY = 'darkmaze:v1';
   const save = (() => {
-    const d = { level: 1, best: {}, muted: false, hintSeen: false };
+    const d = { level: 1, best: {}, muted: false, hintSeen: false, joyLearned: false };
     try { Object.assign(d, JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); } catch (e) { /* storage unavailable */ }
     return d;
   })();
@@ -636,7 +637,7 @@ body {
   }
 
   // ------------------------------------------------------------------ input
-  const joy = { id: null, active: false, ox: 0, oy: 0, x: 0, y: 0, kx: 0, ky: 0, vis: 0 };
+  const joy = { id: null, active: false, ox: 0, oy: 0, x: 0, y: 0, kx: 0, ky: 0, vis: 0, taught: 0 };
   const keys = { up: false, down: false, left: false, right: false };
   const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right' };
 
@@ -689,15 +690,16 @@ body {
     return { x: 0, y: 0, mag: 0, aim: null };
   }
 
+  // The ring is a teaching aid: drawn while you learn to steer, then it fades out for good.
   function updateJoy(dt) {
+    const show = joy.active && !save.joyLearned;
     if (joy.active) {
       joy.kx = joy.x; joy.ky = joy.y;
-      joy.vis += (1 - joy.vis) * damp(14, dt);
     } else {
       const k = damp(16, dt);
       joy.kx += (joy.ox - joy.kx) * k; joy.ky += (joy.oy - joy.ky) * k;
-      joy.vis += (0 - joy.vis) * damp(7, dt);
     }
+    joy.vis += ((show ? 1 : 0) - joy.vis) * damp(show ? 14 : 7, dt);
   }
 
   // ------------------------------------------------------------------ movement & collision
@@ -1047,6 +1049,10 @@ body {
     game.time += dt;
     const inp = readInput();
     if (inp.mag > 0.3 && !hintEl.hidden) { hintEl.hidden = true; save.hintSeen = true; persist(); }
+    if (joy.active && inp.mag > 0.3 && !save.joyLearned) {
+      joy.taught += dt;
+      if (joy.taught >= CFG.joyTeach) { save.joyLearned = true; persist(); }
+    }
     movePlayer(dt, inp);
 
     for (const b of level.bolts) {
@@ -1440,6 +1446,7 @@ body {
   window.DarkMaze = {
     CFG, buildLevel, startLevel, goTitle, pause, resume,
     get game() { return game; }, get level() { return level; }, get player() { return player; },
+    get joy() { return joy; }, get save() { return save; },
   };
 
   const hot = window.claude && window.claude.hot;

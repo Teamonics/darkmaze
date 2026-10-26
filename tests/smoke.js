@@ -121,6 +121,21 @@ async function open(browser, options) {
   const angErr = Math.abs(Math.atan2(Math.sin(after.ang - want), Math.cos(after.ang - want)));
   check(angErr < 0.2, `flashlight points along the drag (off by ${angErr.toFixed(3)} rad)`);
   check(!after.hint, 'hint hides after the first drag');
+  await wait(page, 700);
+  check(await page.evaluate(() => !DarkMaze.save.joyLearned && DarkMaze.joy.vis < 0.05), 'joystick ring fades out on release');
+
+  // Once the controls are learned the ring stays hidden, but dragging still steers.
+  const ringGone = await page.evaluate(() => {
+    DarkMaze.joy.taught = DarkMaze.CFG.joyTeach - 0.2;
+    return { x: DarkMaze.player.x, y: DarkMaze.player.y };
+  });
+  await touch('touchStart', sx, sy);
+  for (let i = 1; i <= 10; i++) { await touch('touchMove', sx - DX[dir] * 6 * i, sy - DY[dir] * 6 * i); await wait(page, 16); }
+  await wait(page, 900);
+  const learned = await page.evaluate(() => ({ learned: DarkMaze.save.joyLearned, vis: DarkMaze.joy.vis, x: DarkMaze.player.x, y: DarkMaze.player.y }));
+  await touch('touchEnd');
+  check(learned.learned && learned.vis < 0.05, `joystick ring hides for good after the first few seconds of walking (vis ${learned.vis.toFixed(3)})`);
+  check(Math.hypot(learned.x - ringGone.x, learned.y - ringGone.y) > 0.3, 'dragging still steers with the ring hidden');
 
   // A drag into a wall must not let the dot through.
   const wallTest = await page.evaluate(async () => {
