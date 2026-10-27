@@ -95,6 +95,25 @@ body {
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* ---------- light-out panel ---------- */
+.dark-panel {
+  position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 58px); z-index: 3;
+  transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px);
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  text-align: center; pointer-events: none; animation: fade-in 0.6s ease-out;
+}
+.dark-panel p { margin: 0; color: var(--dim); font-size: 14px; text-shadow: 0 1px 6px #000; }
+.btn-restart {
+  pointer-events: auto; display: inline-flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 10px 18px 10px 14px; border-radius: 999px;
+  border: 1px solid rgba(255, 236, 204, 0.35); background: rgba(17, 14, 10, 0.85);
+  color: var(--ink); font: 600 15px/1 var(--font-body); cursor: pointer;
+}
+.btn-restart svg { width: 18px; height: 18px; flex: none; }
+.btn-restart:active { background: rgba(255, 236, 204, 0.12); }
+.btn-restart:focus-visible { outline: 2px solid var(--bolt); outline-offset: 2px; }
+@keyframes fade-in { from { opacity: 0; } }
+
 /* ---------- bolt quote ---------- */
 .quote {
   position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 58px); z-index: 3;
@@ -234,6 +253,7 @@ body {
   .hint .trail { animation: none; transform: rotate(-32deg); }
   .hint .base { animation: none; }
   .toast, .quote { transition: none; }
+  .dark-panel { animation: none; }
   .quote { transform: translate(-50%, 0); }
 }
 </style>
@@ -257,6 +277,13 @@ body {
 </header>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="dark-panel" id="darkPanel" role="status" aria-live="polite" hidden>
+  <p>Your light is out. Feel along the walls.</p>
+  <button class="btn-restart" id="btnRestart" type="button">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Restart this maze
+  </button>
+</div>
 <div class="quote" id="quote" role="status" aria-live="polite"><p id="quoteText"></p><div class="by" id="quoteBy"></div></div>
 
 <div class="hint" id="hint" hidden aria-hidden="true">
@@ -566,6 +593,7 @@ body {
   const btnMute = $('btnMute'), btnPause = $('btnPause'), toastEl = $('toast'), hintEl = $('hint'), hintText = $('hintText');
   const overlay = $('overlay'), sheet = $('sheet');
   const quoteEl = $('quote'), quoteText = $('quoteText'), quoteBy = $('quoteBy');
+  const darkPanel = $('darkPanel'), btnRestart = $('btnRestart');
   const coarse = matchMedia('(pointer: coarse)').matches;
 
   const ICON = {
@@ -1153,6 +1181,7 @@ body {
     releaseJoy();
     hideSheet();
     hideQuote(false);
+    darkPanel.hidden = true;
     hudEl.hidden = false;
     lvlEl.innerHTML = `LV <b>${n}</b>/${CFG.levels}`;
     hud.lastB = -1; hud.lastSec = -1;
@@ -1172,6 +1201,7 @@ body {
     fx.flashes.length = 0; fx.particles.length = 0;
     releaseJoy();
     hideQuote(false);
+    darkPanel.hidden = true;
     hudEl.hidden = true; hintEl.hidden = true;
     screenTitle();
     updateCamera(0, lightParams(), true);
@@ -1194,6 +1224,7 @@ body {
     player.vx = player.vy = 0;
     releaseJoy();
     hideQuote(false);
+    darkPanel.hidden = true;
     hudEl.hidden = true; hintEl.hidden = true;
     const n = game.level, prev = save.best[n];
     game.newBest = prev == null || game.time < prev;
@@ -1213,6 +1244,7 @@ body {
     flash(b.x, b.y, 1.5, 0.9, 0.6);
     sfx.pickup(); buzz(20);
     batEl.classList.remove('charged'); void batEl.offsetWidth; batEl.classList.add('charged');
+    darkPanel.hidden = true;
     showQuote(nextQuote());
   }
 
@@ -1240,7 +1272,9 @@ body {
       if (game.battery <= CFG.low && !game.warnedLow) { game.warnedLow = true; toast('Battery low'); }
       if (game.battery === 0) {
         sfx.out(); buzz(70);
-        toast('Your light is dead. Feel along the walls.', 3200);
+        // Keep going in the dark, or take the way out offered at the top (clear any quote covering it).
+        hideQuote(false);
+        darkPanel.hidden = false;
       }
     }
 
@@ -1357,6 +1391,11 @@ body {
   }
   btnMute.addEventListener('click', () => { save.muted = !save.muted; persist(); syncMute(); audio.unlock(); });
   btnPause.addEventListener('click', () => pause());
+  btnRestart.addEventListener('click', () => {
+    if (game.state !== 'playing' && game.state !== 'paused') return;
+    audio.unlock(); sfx.click();
+    ACTIONS.retry();
+  });
   document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 
   // ------------------------------------------------------------------ HUD
@@ -1614,6 +1653,7 @@ body {
       Object.assign(game, { battery: data.battery, time: data.time, walked: data.walked || 0 });
       (data.taken || []).forEach((t, i) => { if (level.bolts[i]) level.bolts[i].taken = t; });
       game.boltsTaken = level.bolts.filter((b) => b.taken).length;
+      darkPanel.hidden = game.battery > 0;
       updateCamera(0, lightParams(), true);
       pause();
     } else {

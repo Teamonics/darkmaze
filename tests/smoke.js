@@ -163,7 +163,8 @@ async function open(browser, options) {
   await wait(page, 700);
   await shot(page, '06-dark');
   check(await page.evaluate(() => DarkMaze.game.battery === 0 && document.getElementById('battery').dataset.state === 'dead'), 'light goes out at 0%');
-  check((await page.textContent('#toast')).includes('dead'), 'player is told the light died');
+  check(await page.evaluate(() => !document.getElementById('darkPanel').hidden && document.getElementById('darkPanel').textContent.includes('Restart this maze')),
+    'when the light dies, a Restart this maze button appears at the top');
 
   const recharge = await page.evaluate(async () => {
     const b = DarkMaze.level.bolts.find((v) => !v.taken);
@@ -173,6 +174,7 @@ async function open(browser, options) {
     return { taken: b.taken, battery: DarkMaze.game.battery, charge: DarkMaze.CFG.boltCharge };
   });
   check(recharge && recharge.taken && recharge.battery > 0.3 && recharge.battery <= recharge.charge, `walking onto a bolt recharges (${recharge && recharge.battery.toFixed(3)})`);
+  check(await page.evaluate(() => document.getElementById('darkPanel').hidden), 'the restart button goes away when the light comes back');
   await wait(page, 450);
   await shot(page, '07-recharged');
   const shown = await page.evaluate(() => {
@@ -193,6 +195,19 @@ async function open(browser, options) {
   });
   check(deck.total === 100 && deck.unique === 100 && deck.twice === 0,
     `all ${deck.total} quotes show once before any repeats, never twice in a row (${deck.unique} unique, ${deck.twice} back-to-back)`);
+
+  // Let the light die again and take the offered restart: same maze, fresh battery, button gone.
+  const seedBefore = await page.evaluate(() => { DarkMaze.game.battery = 0.00002; return DarkMaze.level.seed; });
+  await wait(page, 500);
+  await shot(page, '07b-light-out-restart');
+  check(await page.evaluate(() => !document.getElementById('quote').classList.contains('show')), 'no quote covers the restart button when the light dies');
+  await page.click('#btnRestart');
+  const restarted = await page.evaluate(() => ({
+    seed: DarkMaze.level.seed, battery: DarkMaze.game.battery, state: DarkMaze.game.state,
+    taken: DarkMaze.level.bolts.filter((b) => b.taken).length, hidden: document.getElementById('darkPanel').hidden,
+  }));
+  check(restarted.seed === seedBefore && restarted.state === 'playing' && restarted.battery > 0.99 && restarted.taken === 0 && restarted.hidden,
+    'Restart this maze restarts the same maze with a full battery');
 
   await page.click('#btnPause');
   check(await page.evaluate(() => DarkMaze.game.state === 'paused'), 'pause button pauses');

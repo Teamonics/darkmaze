@@ -12,7 +12,7 @@ Open `index.html` in any modern browser, on a phone or a computer. The game is o
 - **Each bolt shows a short quote** from the great works, from Homer to Shakespeare. There are 100, shuffled so none repeats until you have seen them all.
 - **The light shines through walls**, so you can see what's on the other side. You can't walk through them.
 - **There is only one path out.** The single exit is somewhere in the outer wall, and a faint cold light leaks in around it.
-- With the light dead you can still move. Bumping or sliding along a wall shows that wall for a moment, and bolts very close by glimmer.
+- With the light dead you can still move. Bumping or sliding along a wall shows that wall for a moment, and bolts very close by glimmer. A **Restart this maze** button also appears at the top if you'd rather start the maze over.
 - When you escape, the lights come up and your route is traced over the whole maze.
 - There are **20 levels**, each two cells bigger than the last: 11 × 11 up to a final 49 × 49. Clearing level 20 ends the game.
 
