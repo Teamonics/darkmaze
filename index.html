@@ -27,6 +27,7 @@
   --font-display: "Avenir Next Condensed", "Bahnschrift Condensed", "Roboto Condensed", sans-serif-condensed, "Arial Narrow", system-ui, sans-serif;
   --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  --font-quote: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
   color-scheme: dark;
 }
 [hidden] { display: none !important; }
@@ -93,6 +94,21 @@ body {
   opacity: 0; transform: translate(-50%, -6px); transition: opacity 0.25s, transform 0.25s; pointer-events: none;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- bolt quote ---------- */
+.quote {
+  position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 58px); z-index: 3;
+  width: min(420px, calc(100vw - 32px)); padding: 12px 18px 11px; border-radius: 14px;
+  background: rgba(14, 11, 7, 0.78); border: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  text-align: center; pointer-events: none;
+  opacity: 0; transform: translate(-50%, -8px); transition: opacity 0.4s, transform 0.4s;
+}
+.quote.show { opacity: 1; transform: translate(-50%, 0); }
+.quote p { margin: 0; font: 400 18px/1.35 var(--font-quote); color: var(--beam); }
+.quote p span { display: block; text-wrap: balance; }
+.quote.long p { font-size: 16px; }
+.quote .by { margin-top: 7px; font: 700 10px/1.2 var(--font-mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--bolt); }
 
 /* ---------- finger drag hint ---------- */
 .hint {
@@ -217,7 +233,8 @@ body {
   .hint .tip, .hint .hand { animation: none; transform: translate(48px, -30px); }
   .hint .trail { animation: none; transform: rotate(-32deg); }
   .hint .base { animation: none; }
-  .toast { transition: none; }
+  .toast, .quote { transition: none; }
+  .quote { transform: translate(-50%, 0); }
 }
 </style>
 </head>
@@ -240,6 +257,7 @@ body {
 </header>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="quote" id="quote" role="status" aria-live="polite"><p id="quoteText"></p><div class="by" id="quoteBy"></div></div>
 
 <div class="hint" id="hint" hidden aria-hidden="true">
   <div class="pad">
@@ -547,6 +565,7 @@ body {
   const hudEl = $('hud'), lvlEl = $('lvl'), batEl = $('battery'), batFill = $('batFill'), timeEl = $('time');
   const btnMute = $('btnMute'), btnPause = $('btnPause'), toastEl = $('toast'), hintEl = $('hint'), hintText = $('hintText');
   const overlay = $('overlay'), sheet = $('sheet');
+  const quoteEl = $('quote'), quoteText = $('quoteText'), quoteBy = $('quoteBy');
   const coarse = matchMedia('(pointer: coarse)').matches;
 
   const ICON = {
@@ -560,7 +579,7 @@ body {
   // ------------------------------------------------------------------ save data (per browser, optional)
   const SAVE_KEY = 'darkmaze:v1';
   const save = (() => {
-    const d = { level: 1, best: {}, muted: false, hintSeen: false, joyLearned: false, done: false };
+    const d = { level: 1, best: {}, muted: false, hintSeen: false, joyLearned: false, done: false, quoteOrder: null, quoteAt: 0 };
     try { Object.assign(d, JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); } catch (e) { /* storage unavailable */ }
     d.level = clamp(Math.floor(d.level) || 1, 1, CFG.levels);
     return d;
@@ -838,10 +857,156 @@ body {
 
   let toastTimer = 0;
   function toast(msg, ms = 2200) {
+    // A bolt quote is on screen: say this once it has faded instead of covering it.
+    if (quoteEl.classList.contains('show')) { pendingToast = [msg, ms]; return; }
     toastEl.textContent = msg;
     toastEl.classList.add('show');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
+  }
+
+  // Bolt quotes: the top 100 of the verified quotes in the "Dark Maze bolt quotes" doc, best first.
+  // Each is [text, author, work], copied word for word from a public-domain translation; " / " is a verse line break.
+  const QUOTES = [
+    ["Hope springs from despair.", "Euripides", "Heracles"],
+    ["Listen and rise to light!", "Aeschylus", "Libation Bearers"],
+    ["Lo, freedom’s light hath come!", "Aeschylus", "Libation Bearers"],
+    ["Forward! plant thy footsteps firmly.", "Sophocles", "Philoctetes"],
+    ["We glow inwardly, and go forwards.", "Augustine", "Confessions"],
+    ["Even in darkness will I step with heed.", "Euripides", "Rhesus"],
+    ["How far that little candle throws his beams!", "Shakespeare", "The Merchant of Venice"],
+    ["When strength shall fail me, yes, but not before.", "Sophocles", "Antigone"],
+    ["The night is long that never finds the day.", "Shakespeare", "Macbeth"],
+    ["Night equals all, yet helps the venturous most.", "Euripides", "Phoenician Women"],
+    ["That which is an obstacle on the road helps us on this road.", "Marcus Aurelius", "Meditations"],
+    ["Refuge hath been found.", "Sophocles", "Oedipus at Colonus"],
+    ["I am Prometheus, who gave fire to men.", "Aeschylus", "Prometheus Bound"],
+    ["My soul knows no fear!", "Sophocles", "Oedipus at Colonus"],
+    ["Fair is the prize, and the hope great!", "Plato", "Phaedo"],
+    ["Once more unto the breach, dear friends, once more", "Shakespeare", "Henry V"],
+    ["All things are ready, if our minds be so.", "Shakespeare", "Henry V"],
+    ["The child of morning, rosy-fingered Dawn, appeared", "Homer", "Odyssey"],
+    ["Thou hast come, thou hast come, dawn long-delayed!", "Euripides", "Electra"],
+    ["Like runners hand over the lamp of life.", "Lucretius", "On the Nature of Things"],
+    ["This raised me a little into Thy light", "Augustine", "Confessions"],
+    ["How blithe, returned to light, I look on you!", "Euripides", "Heracles"],
+    ["Sweet is yon sun-god's light, yea, it is sweet.", "Euripides", "Alcestis"],
+    ["Thus high in hope they sat through the livelong night", "Homer", "Iliad"],
+    ["Even in this night that now brings forth the dawn.", "Aeschylus", "Agamemnon"],
+    ["This terror then and darkness of mind must be dispelled", "Lucretius", "On the Nature of Things"],
+    ["Toil, toil, and toil on toil!", "Sophocles", "Ajax"],
+    ["I will hold the light for all these people.", "Homer", "Odyssey"],
+    ["I want to get home, and can think of nothing else.", "Homer", "Odyssey"],
+    ["True hope is swift, and flies with swallow’s wings", "Shakespeare", "Richard III"],
+    ["Fate smiles at last.", "Aeschylus", "Agamemnon"],
+    ["The venture is a glorious one", "Plato", "Phaedo"],
+    ["Take heart, and be not so much dismayed.", "Homer", "Odyssey"],
+    ["This power I possess; this I can do.", "Epictetus", "Discourses"],
+    ["A good start is more than half the race", "Aristotle", "Ethics"],
+    ["I will bear it and make the best of it.", "Homer", "Odyssey"],
+    ["Make use of time while it is present with you.", "Montaigne", "Essays"],
+    ["Heaven propitiated shines with outspread light.", "Lucretius", "On the Nature of Things"],
+    ["Thou flashedst, shonest, and scatteredst my blindness.", "Augustine", "Confessions"],
+    ["Does the light of the lamp shine without losing its splendour until it is extinguished", "Marcus Aurelius", "Meditations"],
+    ["Seeing enough sufficeth for the wise.", "Euripides", "Phoenician Women"],
+    ["I have an unknown amount of toil still to undergo.", "Homer", "Odyssey"],
+    ["The whole of life withal is a struggle in the dark", "Lucretius", "On the Nature of Things"],
+    ["O brave endurance of a soul resolved!", "Aeschylus", "Agamemnon"],
+    ["For after storm once more a calm I see.", "Euripides", "Orestes"],
+    ["Courage is a sort of endurance of the soul", "Plato", "Laches"],
+    ["All things grow step by step, as is natural", "Lucretius", "On the Nature of Things"],
+    ["Heart, be still, you had worse than this to bear", "Homer", "Odyssey"],
+    ["The thing in the world I am most afraid of is fear", "Montaigne", "Essays"],
+    ["Thus is freedom acquired.", "Epictetus", "Discourses"],
+    ["Our doubts are traitors", "Shakespeare", "Measure for Measure"],
+    ["What’s past is prologue", "Shakespeare", "The Tempest"],
+    ["Courage is a kind of salvation.", "Plato", "Republic"],
+    ["Sweet are the uses of adversity", "Shakespeare", "As You Like It"],
+    ["Look within. Within is the fountain of good", "Marcus Aurelius", "Meditations"],
+    ["Success, remember, is the meed of toil.", "Sophocles", "Electra"],
+    ["Why by despondency is fair hope slain?", "Sophocles", "Trachiniae"],
+    ["The gods, who once abased, uplift thee now.", "Sophocles", "Oedipus at Colonus"],
+    ["Courage and craft shall arm me, this to do.", "Aeschylus", "Seven Against Thebes"],
+    ["Look round at the courses of the stars", "Marcus Aurelius", "Meditations"],
+    ["You may fetter my leg, but my will not even Zeus himself can overpower.", "Epictetus", "Discourses"],
+    ["Men shall learn wisdom, by affliction schooled.", "Aeschylus", "Agamemnon"],
+    ["Nothing great, said Epictetus, is produced suddenly", "Epictetus", "Discourses"],
+    ["There is pleasure even in hope of good.", "Euripides", "Orestes"],
+    ["The dripping from the eaves hollows a stone", "Lucretius", "On the Nature of Things"],
+    ["Yet the god loves to let the weak prevail.", "Aeschylus", "Seven Against Thebes"],
+    ["Nothing else can conquer Will except the Will itself.", "Epictetus", "Discourses"],
+    ["Not being able to govern events, I govern myself", "Montaigne", "Essays"],
+    ["The miserable have no other medicine / But only hope", "Shakespeare", "Measure for Measure"],
+    ["The beginning is the most important part of any work", "Plato", "Republic"],
+    ["I am rising to the work of a human being.", "Marcus Aurelius", "Meditations"],
+    ["He who fears he shall suffer, already suffers what he fears.", "Montaigne", "Essays"],
+    ["The fault, dear Brutus, is not in our stars, / But in ourselves", "Shakespeare", "Julius Caesar"],
+    ["Be not afraid of greatness", "Shakespeare", "Twelfth Night"],
+    ["That sore mischance may turn to fortune fair.", "Euripides", "Helen"],
+    ["The sailors, because of their experience, are full of hope", "Aristotle", "Ethics"],
+    ["Thou wilt find calm, everything stable, and a waveless bay.", "Marcus Aurelius", "Meditations"],
+    ["Things won are done; joy’s soul lies in the doing.", "Shakespeare", "Troilus and Cressida"],
+    ["Death or pain is not formidable, but the fear of pain or death.", "Epictetus", "Discourses"],
+    ["Be like the promontory against which the waves continually break, but it stands firm", "Marcus Aurelius", "Meditations"],
+    ["Nothing happens to any man which he is not formed by nature to bear.", "Marcus Aurelius", "Meditations"],
+    ["Let us go forward and either win glory for ourselves, or yield it to another.", "Homer", "Iliad"],
+    ["Confine thyself to the present.", "Marcus Aurelius", "Meditations"],
+    ["Let not future things disturb thee", "Marcus Aurelius", "Meditations"],
+    ["Well, when a god works, all is possible.", "Sophocles", "Ajax"],
+    ["Now is the time for hunger, bear it well.", "Epictetus", "Discourses"],
+    ["With these words he put heart and soul into them all.", "Homer", "Iliad"],
+    ["Cowards die many times before their deaths; / The valiant never taste of death but once.", "Shakespeare", "Julius Caesar"],
+    ["Many wonders there be, but naught more wondrous than man", "Sophocles", "Antigone"],
+    ["Yea, I am free, strong in the strength of truth.", "Sophocles", "Oedipus Rex"],
+    ["The most manifest sign of wisdom is a continual cheerfulness", "Montaigne", "Essays"],
+    ["We know what we are, but know not what we may be.", "Shakespeare", "Hamlet"],
+    ["Virtue depends upon ourselves", "Aristotle", "Ethics"],
+    ["Loss is nothing else than change.", "Marcus Aurelius", "Meditations"],
+    ["Still, no man can be good at everything.", "Homer", "Iliad"],
+    ["The unexamined life is not worth living", "Plato", "Apology"],
+    ["Whither the argument leads, thither let us follow", "Plato", "Laws"],
+    ["Blind hopes I sent to nestle in man’s heart.", "Aeschylus", "Prometheus Bound"],
+    ["O'ershoot not now the mark, but bear all bravely.", "Euripides", "Alcestis"],
+    ["If so he will, your toils to joy will turn.", "Aeschylus", "Suppliant Maidens"],
+  ];
+
+  // A shuffled deck per browser: every quote shows once before any repeats, and never twice in a row.
+  function nextQuote() {
+    if (!Array.isArray(save.quoteOrder) || save.quoteOrder.length !== QUOTES.length || !(save.quoteAt < QUOTES.length)) {
+      const last = Array.isArray(save.quoteOrder) ? save.quoteOrder[save.quoteAt - 1] : -1;
+      const order = shuffle(QUOTES.map((_, i) => i), Math.random);
+      if (order[0] === last) order.push(order.shift());
+      save.quoteOrder = order;
+      save.quoteAt = 0;
+    }
+    const q = QUOTES[save.quoteOrder[save.quoteAt++]];
+    persist();
+    return q;
+  }
+
+  let quoteTimer = 0, pendingToast = null;
+  function showQuote([text, author, work]) {
+    // Each verse line is its own balanced block, so a line that wraps never strands a single word.
+    quoteText.replaceChildren(...text.split(' / ').map((part) => {
+      const line = document.createElement('span');
+      line.textContent = part;
+      return line;
+    }));
+    quoteEl.classList.toggle('long', text.length > 70);
+    quoteBy.textContent = `${author} · ${work}`;
+    toastEl.classList.remove('show');
+    quoteEl.classList.add('show');
+    // Long enough to read at a glance: about a quarter second a word, 3 to 6.5 seconds in all.
+    const words = text.replace(/ \/ /g, ' ').split(' ').length;
+    clearTimeout(quoteTimer);
+    quoteTimer = setTimeout(() => hideQuote(true), clamp(2000 + 280 * words, 3000, 6500));
+  }
+  function hideQuote(flush) {
+    clearTimeout(quoteTimer);
+    quoteEl.classList.remove('show');
+    const waiting = pendingToast;
+    pendingToast = null;
+    if (flush && waiting) toast(...waiting);
   }
 
   // ------------------------------------------------------------------ flashlight
@@ -987,6 +1152,7 @@ body {
     fx.flashes.length = 0; fx.particles.length = 0; fx.flickT = 0; fx.beatT = 0;
     releaseJoy();
     hideSheet();
+    hideQuote(false);
     hudEl.hidden = false;
     lvlEl.innerHTML = `LV <b>${n}</b>/${CFG.levels}`;
     hud.lastB = -1; hud.lastSec = -1;
@@ -1005,6 +1171,7 @@ body {
     Object.assign(game, { state: 'title', battery: 1, flick: 1 });
     fx.flashes.length = 0; fx.particles.length = 0;
     releaseJoy();
+    hideQuote(false);
     hudEl.hidden = true; hintEl.hidden = true;
     screenTitle();
     updateCamera(0, lightParams(), true);
@@ -1026,6 +1193,7 @@ body {
     game.state = 'won'; game.wonT = 0; game.sheetShown = false;
     player.vx = player.vy = 0;
     releaseJoy();
+    hideQuote(false);
     hudEl.hidden = true; hintEl.hidden = true;
     const n = game.level, prev = save.best[n];
     game.newBest = prev == null || game.time < prev;
@@ -1038,7 +1206,6 @@ body {
   function pickUp(b) {
     b.taken = true;
     game.boltsTaken++;
-    const wasDark = game.battery <= 0, before = game.battery;
     game.battery = Math.min(1, game.battery + CFG.boltCharge);
     if (game.battery > CFG.low + 0.05) game.warnedLow = false;
     fx.flickT = 0; game.flick = 1;
@@ -1046,7 +1213,7 @@ body {
     flash(b.x, b.y, 1.5, 0.9, 0.6);
     sfx.pickup(); buzz(20);
     batEl.classList.remove('charged'); void batEl.offsetWidth; batEl.classList.add('charged');
-    toast(wasDark ? 'Light’s back' : `+${Math.round((game.battery - before) * 100)}% battery`, 1400);
+    showQuote(nextQuote());
   }
 
   function updatePlaying(dt) {
@@ -1461,6 +1628,7 @@ body {
     CFG, buildLevel, startLevel, sizeFor, goTitle, pause, resume,
     get game() { return game; }, get level() { return level; }, get player() { return player; },
     get joy() { return joy; }, get save() { return save; },
+    QUOTES, nextQuote, showQuote,
   };
 
   const hot = window.claude && window.claude.hot;

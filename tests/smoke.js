@@ -173,8 +173,26 @@ async function open(browser, options) {
     return { taken: b.taken, battery: DarkMaze.game.battery, charge: DarkMaze.CFG.boltCharge };
   });
   check(recharge && recharge.taken && recharge.battery > 0.3 && recharge.battery <= recharge.charge, `walking onto a bolt recharges (${recharge && recharge.battery.toFixed(3)})`);
-  await wait(page, 150);
+  await wait(page, 450);
   await shot(page, '07-recharged');
+  const shown = await page.evaluate(() => {
+    const text = document.getElementById('quoteText').textContent;
+    return {
+      show: document.getElementById('quote').classList.contains('show'),
+      by: document.getElementById('quoteBy').textContent,
+      known: DarkMaze.QUOTES.some(([q]) => q.split(' / ').join('') === text),
+    };
+  });
+  check(shown.show && shown.known && shown.by.includes(' · '), `picking up a bolt shows a quote from the list (${shown.by})`);
+  const deck = await page.evaluate(() => {
+    DarkMaze.save.quoteOrder = null;
+    const first = Array.from({ length: DarkMaze.QUOTES.length }, () => DarkMaze.nextQuote()[0]);
+    let prev = first[first.length - 1], twice = 0;
+    for (let i = 0; i < 500; i++) { const q = DarkMaze.nextQuote()[0]; if (q === prev) twice++; prev = q; }
+    return { total: DarkMaze.QUOTES.length, unique: new Set(first).size, twice };
+  });
+  check(deck.total === 100 && deck.unique === 100 && deck.twice === 0,
+    `all ${deck.total} quotes show once before any repeats, never twice in a row (${deck.unique} unique, ${deck.twice} back-to-back)`);
 
   await page.click('#btnPause');
   check(await page.evaluate(() => DarkMaze.game.state === 'paused'), 'pause button pauses');
@@ -252,6 +270,23 @@ async function open(browser, options) {
         return [b.left - a.right, c.left - b.right, window.innerWidth - c.right];
       });
       check(gaps.every((g) => g >= 0), `HUD fits a 360px phone at level 20/20 (gaps ${gaps.map((g) => g.toFixed(0)).join(', ')} px)`);
+      // The longest quote, and a verse quote, must sit inside the screen without crowding the view.
+      for (const pick of ['longest', 'verse']) {
+        const fit = await s.page.evaluate((which) => {
+          const Q = DarkMaze.QUOTES;
+          const q = which === 'longest' ? Q.reduce((a, b) => (b[0].length > a[0].length ? b : a)) : Q.find(([x]) => x.includes(' / '));
+          DarkMaze.showQuote(q);
+          return q[0];
+        }, pick);
+        await wait(s.page, 600);
+        const box = await s.page.evaluate(() => {
+          const r = document.getElementById('quote').getBoundingClientRect();
+          return { left: r.left, right: r.right, top: r.top, height: r.height, vw: innerWidth, lines: document.querySelectorAll('#quoteText span').length };
+        });
+        await shot(s.page, `14-quote-${pick}`);
+        check(box.left >= 0 && box.right <= box.vw && box.height <= 150,
+          `${pick} quote fits a 360px phone (${Math.round(box.height)}px tall${box.lines > 1 ? `, ${box.lines} verse lines` : ''}): “${fit.slice(0, 40)}…”`);
+      }
     }
     if (name.includes('desktop')) {
       await s.page.click('[data-action="play"]');
