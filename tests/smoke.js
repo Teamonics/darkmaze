@@ -17,8 +17,16 @@ const check = (ok, msg) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${msg}`); if (
 const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, `${name}.png`) });
 const wait = (page, ms) => page.waitForTimeout(ms);
 
-async function open(browser, options) {
+async function open(browser, options, saved) {
   const context = await browser.newContext(options);
+  // Count any attempt to make sound or vibrate: the game should do neither.
+  await context.addInitScript((save) => {
+    window.__noise = { audio: 0, vibrate: 0 };
+    const count = (k) => function () { window.__noise[k]++; };
+    window.AudioContext = window.webkitAudioContext = count('audio');
+    navigator.vibrate = count('vibrate');
+    if (save) localStorage.setItem('darkmaze:v1', JSON.stringify(save));
+  }, saved || null);
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -262,8 +270,49 @@ async function open(browser, options) {
   await page.click('[data-action="again"]');
   check(await page.evaluate(() => DarkMaze.game.level === 1 && DarkMaze.level.w === 11), 'play again starts level 1');
 
+  const noise = await page.evaluate(() => window.__noise);
+  check(noise.audio === 0 && noise.vibrate === 0, `no sound and no vibration through a whole run (${noise.audio} audio, ${noise.vibrate} vibrate)`);
+  const godly = await page.evaluate(() => DarkMaze.QUOTES.filter(([q]) => /\b(gods?|god's|sun-god|zeus|jove|prometheus|heaven|divine)\b/i.test(q) || /\s(Thy|Thee|Thou)\b/.test(q)).map(([q]) => q));
+  check(godly.length === 0, `no in-game quote refers to a god ${godly.length ? JSON.stringify(godly) : ''}`);
+  check(await page.evaluate(() => !document.getElementById('btnMute')), 'there is no sound button');
+
   check(errors.length === 0, `no console errors on phone ${errors.length ? JSON.stringify(errors) : ''}`);
   await context.close();
+
+  // ---------------------------------------------------------------- 2b. choose level
+  {
+    const lv = await open(browser, { ...devices['iPhone 13'] }, { level: 4, best: { 1: 31, 2: 47, 3: 62 }, hintSeen: true, joyLearned: true });
+    const P = lv.page;
+    await wait(P, 400);
+    const titleButtons = await P.evaluate(() => [...document.querySelectorAll('.sheet .btn')].map((b) => b.textContent.trim()));
+    check(titleButtons.includes('Continue · Level 4') && titleButtons.includes('Choose level'), `title offers Choose level once a level is beaten (${titleButtons.join(' | ')})`);
+    await P.click('[data-action="levels"]');
+    await wait(P, 500);
+    await shot(P, '15-choose-level');
+    const tiles = await P.evaluate(() => [...document.querySelectorAll('.lvl-tile')].map((b) => ({ n: +b.dataset.level, on: !b.disabled, sub: b.querySelector('small').textContent })));
+    const open1to4 = tiles.filter((x) => x.on).map((x) => x.n).join(',');
+    check(tiles.length === 20 && open1to4 === '1,2,3,4' && tiles[1].sub === '0:47' && tiles[3].sub === 'Next',
+      `beaten levels 1-3 (with best times) and next level 4 can be picked; 5-20 are locked (open: ${open1to4})`);
+    await P.click('.lvl-tile[data-level="2"]');
+    check(await P.evaluate(() => DarkMaze.game.state === 'playing' && DarkMaze.game.level === 2 && DarkMaze.level.w === 13), 'picking level 2 starts the 13×13 maze');
+    const side = await P.evaluate(() => {
+      const e = DarkMaze.level.exit, p = DarkMaze.player;
+      p.x = e.x + 0.5; p.y = e.y + 0.5; p.vx = p.vy = 0;
+      return e.side;
+    });
+    const k = ['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'][side];
+    await P.keyboard.down(k); await wait(P, 700); await P.keyboard.up(k);
+    check(await P.evaluate(() => DarkMaze.game.state === 'won' && DarkMaze.save.level === 4), 'beating an earlier level again keeps progress at level 4');
+    await wait(P, 2200);
+    await P.click('[data-action="menu"]');
+    await P.click('[data-action="levels"]');
+    await P.click('[data-action="back"]');
+    check(await P.evaluate(() => DarkMaze.game.state === 'title' && !!document.querySelector('.logo')), 'Back returns to the title screen');
+    const fresh = await open(browser, { ...devices['iPhone 13'] });
+    check(await fresh.page.evaluate(() => !document.querySelector('[data-action="levels"]')), 'a new player sees no Choose level button yet');
+    check(lv.errors.length === 0 && fresh.errors.length === 0, `no console errors in level select ${JSON.stringify(lv.errors.concat(fresh.errors))}`);
+    await lv.context.close(); await fresh.context.close();
+  }
 
   // ---------------------------------------------------------------- 3. other screens
   for (const [name, opts] of [
