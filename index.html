@@ -299,6 +299,7 @@ body {
     joyDead: 14,          // between joyAim and this the beam turns but you stand still
     joyTeach: 6,          // seconds of walking with the joystick drawn; after that it stays invisible
     cellsOnScreen: 8,
+    levels: 20,           // 11×11 up to 49×49, two cells bigger each level
   };
 
   const COL = {
@@ -559,8 +560,9 @@ body {
   // ------------------------------------------------------------------ save data (per browser, optional)
   const SAVE_KEY = 'darkmaze:v1';
   const save = (() => {
-    const d = { level: 1, best: {}, muted: false, hintSeen: false, joyLearned: false };
+    const d = { level: 1, best: {}, muted: false, hintSeen: false, joyLearned: false, done: false };
     try { Object.assign(d, JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); } catch (e) { /* storage unavailable */ }
+    d.level = clamp(Math.floor(d.level) || 1, 1, CFG.levels);
     return d;
   })();
   const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* storage unavailable */ } };
@@ -970,9 +972,11 @@ body {
   }
 
   // ------------------------------------------------------------------ game flow
-  const sizeFor = (n) => Math.min(9 + 2 * n, 41);
+  const sizeFor = (n) => 9 + 2 * clamp(n, 1, CFG.levels);
+  const levelName = (n) => (n >= CFG.levels ? 'Final level' : `Level ${n} of ${CFG.levels}`);
 
   function startLevel(n, seed = randSeed()) {
+    n = clamp(n, 1, CFG.levels);
     const size = sizeFor(n);
     level = prepareLevel(buildLevel(size, seed));
     player = newPlayer(level);
@@ -984,7 +988,7 @@ body {
     releaseJoy();
     hideSheet();
     hudEl.hidden = false;
-    lvlEl.innerHTML = `LV <b>${n}</b>`;
+    lvlEl.innerHTML = `LV <b>${n}</b>/${CFG.levels}`;
     hud.lastB = -1; hud.lastSec = -1;
     save.level = n; persist();
     if (!save.hintSeen) {
@@ -992,7 +996,7 @@ body {
       hintEl.hidden = false;
     }
     updateCamera(0, lightParams(), true);
-    toast(`Level ${n} · ${size} × ${size}`);
+    toast(`${levelName(n)} · ${size} × ${size}`);
   }
 
   function goTitle() {
@@ -1026,7 +1030,7 @@ body {
     const n = game.level, prev = save.best[n];
     game.newBest = prev == null || game.time < prev;
     if (game.newBest) save.best[n] = game.time;
-    save.level = n + 1;
+    if (n >= CFG.levels) { save.done = true; save.level = 1; } else save.level = n + 1;
     persist();
     sfx.win(); buzz([30, 60, 30]);
   }
@@ -1116,7 +1120,7 @@ body {
         <li>${ICON.exit}<span>There’s only one exit</span></li>
       </ul>
       <div class="actions">
-        <button class="btn primary" type="button" data-action="play">${lvl > 1 ? `Continue · Level ${lvl}` : 'Play'}</button>
+        <button class="btn primary" type="button" data-action="play">${lvl > 1 ? `Continue · Level ${lvl}` : save.done ? 'Play again' : 'Play'}</button>
         ${lvl > 1 ? '<button class="btn quiet" type="button" data-action="fresh">Start over</button>' : ''}
       </div>
       <p class="keys">Drag, WASD or arrow keys to move · P to pause</p>`, 'title');
@@ -1124,7 +1128,7 @@ body {
 
   function screenPause() {
     showSheet(`
-      <p class="eyebrow">Level ${game.level} · ${level.w} × ${level.h}</p>
+      <p class="eyebrow">${levelName(game.level)} · ${level.w} × ${level.h}</p>
       <h2 id="sheetTitle">Paused</h2>
       <p class="note">Battery <b>${Math.round(game.battery * 100)}%</b> · ${fmtTime(game.time)} in the dark</p>
       <div class="actions">
@@ -1136,19 +1140,28 @@ body {
   }
 
   function screenWin() {
-    const n = game.level, best = save.best[n];
+    const n = game.level, best = save.best[n], final = n >= CFG.levels;
+    const bests = Array.from({ length: CFG.levels }, (_, i) => save.best[i + 1]);
+    const total = bests.every((t) => t != null) ? bests.reduce((a, t) => a + t, 0) : null;
+    const next = sizeFor(n + 1);
+    const note = final
+      ? `You escaped all ${CFG.levels} mazes.${total != null ? ` Your best times add up to <b>${fmtTime(total)}</b>.` : ''}`
+      : `${game.newBest ? '<b>New best for this level.</b> ' : ''}The shortest way out was <b>${level.path.length} steps</b>. Your route is traced in gold.`;
+    const primary = final
+      ? '<button class="btn primary" type="button" data-action="again">Play again from level 1</button>'
+      : `<button class="btn primary" type="button" data-action="next">${n + 1 >= CFG.levels ? 'Final level' : `Level ${n + 1}`} · ${next} × ${next}</button>`;
     showSheet(`
-      <p class="eyebrow">Level ${n} cleared · ${level.w} × ${level.h}</p>
-      <h2 id="sheetTitle">You got out</h2>
+      <p class="eyebrow">${final ? `All ${CFG.levels} levels cleared` : `${levelName(n)} cleared`} · ${level.w} × ${level.h}</p>
+      <h2 id="sheetTitle">${final ? 'You’re free' : 'You got out'}</h2>
       <dl class="stats">
         <div><dt>Time</dt><dd>${fmtTime(game.time)}</dd></div>
         <div class="${game.newBest ? 'best' : ''}"><dt>Best</dt><dd>${fmtTime(best ?? game.time)}</dd></div>
         <div><dt>Bolts</dt><dd>${game.boltsTaken}<small>/${level.bolts.length}</small></dd></div>
         <div><dt>Steps</dt><dd>${Math.round(game.walked)}</dd></div>
       </dl>
-      <p class="note">${game.newBest ? '<b>New best for this level.</b> ' : ''}The shortest way out was <b>${level.path.length} steps</b>. Your route is traced in gold.</p>
+      <p class="note">${note}</p>
       <div class="actions">
-        <button class="btn primary" type="button" data-action="next">Level ${n + 1} · ${sizeFor(n + 1)} × ${sizeFor(n + 1)}</button>
+        ${primary}
         <button class="btn quiet" type="button" data-action="menu">Main menu</button>
       </div>`, 'win');
   }
@@ -1160,6 +1173,7 @@ body {
     retry: () => startLevel(game.level, level.seed),
     reroll: () => startLevel(game.level),
     next: () => startLevel(game.level + 1),
+    again: () => startLevel(1),
     menu: () => goTitle(),
   };
   overlay.addEventListener('click', (e) => {
@@ -1444,7 +1458,7 @@ body {
 
   // Hooks for automated tests and tinkering from the console.
   window.DarkMaze = {
-    CFG, buildLevel, startLevel, goTitle, pause, resume,
+    CFG, buildLevel, startLevel, sizeFor, goTitle, pause, resume,
     get game() { return game; }, get level() { return level; }, get player() { return player; },
     get joy() { return joy; }, get save() { return save; },
   };

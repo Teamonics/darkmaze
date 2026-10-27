@@ -12,7 +12,8 @@ Open `index.html` in any modern browser, on a phone or a computer. The game is o
 - **The light shines through walls**, so you can see what's on the other side. You can't walk through them.
 - **There is only one path out.** The single exit is somewhere in the outer wall, and a faint cold light leaks in around it.
 - With the light dead you can still move. Bumping or sliding along a wall shows that wall for a moment, and bolts very close by glimmer.
-- When you escape, the lights come up and your route is traced over the whole maze. Each level is a bigger maze.
+- When you escape, the lights come up and your route is traced over the whole maze.
+- There are **20 levels**, each two cells bigger than the last: 11 × 11 up to a final 49 × 49. Clearing level 20 ends the game.
 
 Desktop: drag with the mouse, or use WASD / arrow keys. `P` or `Esc` pauses.
 
@@ -39,7 +40,7 @@ node tests/smoke.js
 
 Needs Playwright with Chromium. The test:
 
-- Generates 300 mazes from 11×11 to 41×41 and checks the rules: every cell reachable, no loops, exactly one opening, a connected route, and sensible bolt placement.
+- Generates 360 mazes from 11×11 to 49×49 and checks the rules: every cell reachable, no loops, exactly one opening, a connected route, and sensible bolt placement.
 - Plays on an emulated iPhone: a real touch drag, walls blocking the dot, battery stages, the light dying, a recharge, pause and resume, escaping, and the next level.
 - Renders the title screen in landscape and on desktop.
 

@@ -37,7 +37,7 @@ async function open(browser, options) {
     const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
     const problems = [];
     let mazes = 0, bolts = 0, pathCells = 0;
-    for (const size of [11, 13, 21, 31, 41]) {
+    for (const size of [11, 13, 21, 31, 41, 49]) {
       for (let k = 1; k <= 60; k++) {
         const seed = k * 7919, tag = `${size}x${size} seed ${seed}`;
         const m = DarkMaze.buildLevel(size, seed);
@@ -203,6 +203,32 @@ async function open(browser, options) {
   await page.click('[data-action="next"]');
   check(await page.evaluate(() => DarkMaze.game.state === 'playing' && DarkMaze.game.level === 2 && DarkMaze.level.w === 13), 'next level is bigger');
 
+  // Twenty levels, each two cells bigger, ending at 49×49.
+  const sizes = await page.evaluate(() => Array.from({ length: 21 }, (_, i) => DarkMaze.sizeFor(i + 1)));
+  check(sizes[0] === 11 && sizes[19] === 49 && sizes.slice(1, 20).every((v, i) => v === sizes[i] + 2) && sizes[20] === 49,
+    `20 levels grow from 11×11 to 49×49 (${sizes.slice(0, 20).join(', ')})`);
+
+  // The last level ends the game and sends you back to level 1.
+  await page.evaluate(() => DarkMaze.startLevel(20));
+  check(await page.evaluate(() => DarkMaze.level.w === 49 && document.getElementById('lvl').textContent.trim() === 'LV 20/20'), 'level 20 is the 49×49 final level');
+  const finalSide = await page.evaluate(() => {
+    const e = DarkMaze.level.exit, p = DarkMaze.player;
+    p.x = e.x + 0.5; p.y = e.y + 0.5; p.vx = p.vy = 0;
+    return e.side;
+  });
+  const fk = ['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'][finalSide];
+  await page.keyboard.down(fk); await wait(page, 700); await page.keyboard.up(fk);
+  await wait(page, 2600);
+  await shot(page, '10-finished');
+  const fin = await page.evaluate(() => ({
+    text: document.getElementById('sheet').textContent, again: !!document.querySelector('[data-action="again"]'),
+    next: !!document.querySelector('[data-action="next"]'), save: { level: DarkMaze.save.level, done: DarkMaze.save.done },
+  }));
+  check(fin.text.includes('You’re free') && fin.again && !fin.next, 'finishing level 20 shows the ending, with no level 21');
+  check(fin.save.level === 1 && fin.save.done, 'after the ending, progress restarts at level 1');
+  await page.click('[data-action="again"]');
+  check(await page.evaluate(() => DarkMaze.game.level === 1 && DarkMaze.level.w === 11), 'play again starts level 1');
+
   check(errors.length === 0, `no console errors on phone ${errors.length ? JSON.stringify(errors) : ''}`);
   await context.close();
 
@@ -210,10 +236,23 @@ async function open(browser, options) {
   for (const [name, opts] of [
     ['10-title-landscape', { viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }],
     ['11-title-desktop', { viewport: { width: 1280, height: 800 } }],
+    ['13-small-phone', { viewport: { width: 360, height: 640 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }],
   ]) {
     const s = await open(browser, opts);
     await wait(s.page, 600);
     await shot(s.page, name);
+    if (name.includes('small')) {
+      await s.page.click('[data-action="play"]');
+      await s.page.evaluate(() => DarkMaze.startLevel(20));
+      await wait(s.page, 600);
+      await shot(s.page, name);
+      const gaps = await s.page.evaluate(() => {
+        const r = (sel) => document.querySelector(sel).getBoundingClientRect();
+        const a = r('.lvl'), b = r('.battery'), c = r('.hud-right');
+        return [b.left - a.right, c.left - b.right, window.innerWidth - c.right];
+      });
+      check(gaps.every((g) => g >= 0), `HUD fits a 360px phone at level 20/20 (gaps ${gaps.map((g) => g.toFixed(0)).join(', ')} px)`);
+    }
     if (name.includes('desktop')) {
       await s.page.click('[data-action="play"]');
       await wait(s.page, 900);
