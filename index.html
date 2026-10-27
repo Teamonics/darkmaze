@@ -1144,9 +1144,9 @@ body {
         <div><dt>Time</dt><dd>${fmtTime(game.time)}</dd></div>
         <div class="${game.newBest ? 'best' : ''}"><dt>Best</dt><dd>${fmtTime(best ?? game.time)}</dd></div>
         <div><dt>Bolts</dt><dd>${game.boltsTaken}<small>/${level.bolts.length}</small></dd></div>
-        <div><dt>Walked</dt><dd>${Math.round(game.walked)}<small> cells</small></dd></div>
+        <div><dt>Steps</dt><dd>${Math.round(game.walked)}</dd></div>
       </dl>
-      <p class="note">${game.newBest ? '<b>New best for this level.</b> ' : ''}The shortest way out was <b>${level.path.length} cells</b>. Your route is traced in gold.</p>
+      <p class="note">${game.newBest ? '<b>New best for this level.</b> ' : ''}The shortest way out was <b>${level.path.length} steps</b>. Your route is traced in gold.</p>
       <div class="actions">
         <button class="btn primary" type="button" data-action="next">Level ${n + 1} · ${sizeFor(n + 1)} × ${sizeFor(n + 1)}</button>
         <button class="btn quiet" type="button" data-action="menu">Main menu</button>

@@ -186,6 +186,7 @@ async function open(browser, options) {
   const exitSide = await page.evaluate(() => {
     const e = DarkMaze.level.exit, p = DarkMaze.player;
     p.x = e.x + 0.5; p.y = e.y + 0.5; p.vx = p.vy = 0;
+    Object.assign(DarkMaze.game, { walked: 1234, time: 754 }); // long-run numbers for the stat tiles
     return e.side;
   });
   const key = ['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'][exitSide];
@@ -194,6 +195,11 @@ async function open(browser, options) {
   await wait(page, 2600);
   await shot(page, '09-escaped');
   check((await page.textContent('#sheet')).includes('You got out'), 'escape sheet shows');
+  const tiles = await page.evaluate(() => [...document.querySelectorAll('.stats div')].map((d) => ({
+    text: d.textContent, fits: d.scrollWidth <= d.clientWidth && d.querySelector('dd').scrollWidth <= d.querySelector('dd').clientWidth,
+  })));
+  check(tiles.length === 4 && tiles.every((x) => x.fits), `every stat fits its tile ${JSON.stringify(tiles.map((x) => x.text))}`);
+  check(!(await page.textContent('#sheet')).includes('cells'), 'summary talks in steps, not cells');
   await page.click('[data-action="next"]');
   check(await page.evaluate(() => DarkMaze.game.state === 'playing' && DarkMaze.game.level === 2 && DarkMaze.level.w === 13), 'next level is bigger');
 
