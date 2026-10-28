@@ -847,9 +847,9 @@ body {
     toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
   }
 
-  // Bolt quotes: the 107 verified quotes in the "Dark Maze bolt quotes" doc that score 76 or more out of 100,
-  // best first, none referring to a god. Each is [text, author, work], copied word for word from a public-domain
-  // translation; " / " is a verse line break.
+  // Bolt quotes: the 145 quotes in the "Dark Maze bolt quotes" doc that score 74 or more out of 100, plus
+  // Aristotle lines picked by hand; best first, none referring to a god. Each is [text, author, work], copied
+  // word for word from a public-domain translation; " / " is a verse line break and " … " marks a cut.
   const QUOTES = [
     ["How far that little candle throws his beams!", "Shakespeare", "The Merchant of Venice"],
     ["Dark night will not rob you of the road", "Lucretius", "On the Nature of Things"],
@@ -891,6 +891,7 @@ body {
     ["If this is the road, let us take it.", "Plato", "Philebus"],
     ["There are briars in the road.—Turn aside from them.", "Marcus Aurelius", "Meditations"],
     ["True hope is swift, and flies with swallow’s wings", "Shakespeare", "Richard III"],
+    ["Never did eye see the sun unless it had first become sunlike", "Plotinus", "Enneads"],
     ["A merry heart goes all the day, Your sad tires in a mile-a.", "Shakespeare", "The Winter's Tale"],
     ["What’s past is prologue", "Shakespeare", "The Tempest"],
     ["Hope springs from despair.", "Euripides", "Heracles"],
@@ -958,6 +959,43 @@ body {
     ["I want to get home, and can think of nothing else.", "Homer", "Odyssey"],
     ["To business that we love we rise betime, / And go to’t with delight.", "Shakespeare", "Antony and Cleopatra"],
     ["How poor are they that have not patience! / What wound did ever heal but by degrees?", "Shakespeare", "Othello"],
+    ["Brave to the last!", "Aeschylus", "Agamemnon"],
+    ["O brave new world", "Shakespeare", "The Tempest"],
+    ["Bear free and patient thoughts.", "Shakespeare", "King Lear"],
+    ["Thus I speak away that fear.", "Aeschylus", "Furies"],
+    ["My resolution was not born to-day.", "Sophocles", "Electra"],
+    ["Let me embrace thee, sour adversity", "Shakespeare", "Henry VI, Part III"],
+    ["Come, stand by me; fear nothing.", "Shakespeare", "The Comedy of Errors"],
+    ["Seeing enough sufficeth for the wise.", "Euripides", "Phoenician Women"],
+    ["Hail to the freedom won to me!", "Aeschylus", "Libation Bearers"],
+    ["The child of morning, rosy-fingered Dawn, appeared", "Homer", "Odyssey"],
+    ["Seest thou not how onward speed my limbs?", "Euripides", "Children of Heracles"],
+    ["Hail, thou broad expanse of bright blue sky!", "Euripides", "Ion"],
+    ["Of all base passions, fear is most accursed.", "Shakespeare", "Henry VI, Part I"],
+    ["Behold! though my steps loiter, my thoughts take wings.", "Euripides", "Ion"],
+    ["The soul that has no established aim loses itself", "Montaigne", "Essays"],
+    ["Be stirring as the time; be fire with fire", "Shakespeare", "King John"],
+    ["Love give me strength! and strength shall help afford.", "Shakespeare", "Romeo and Juliet"],
+    ["How blithe, returned to light, I look on you!", "Euripides", "Heracles"],
+    ["A good start is more than half the race", "Aristotle", "Ethics"],
+    ["Be great in act, as you have been in thought", "Shakespeare", "King John"],
+    ["Things won are done; joy’s soul lies in the doing.", "Shakespeare", "Troilus and Cressida"],
+    ["Last of all he will be able to see the sun", "Plato", "Republic"],
+    ["All things are change, yet we need not fear anything new.", "Marcus Aurelius", "Meditations"],
+    ["For what is more beautiful than fire flaming, blazing, and shining?", "Augustine", "City of God"],
+    ["If I find them worse tomorrow, I will provide new stratagems.", "Montaigne", "Essays"],
+    ["Do not disturb thyself by thinking of the whole of thy life.", "Marcus Aurelius", "Meditations"],
+    ["The thing in the world I am most afraid of is fear", "Montaigne", "Essays"],
+    ["It is in thy power continuously to fan these thoughts into a flame.", "Marcus Aurelius", "Meditations"],
+    ["The worst is not / So long as we can say “This is the worst.”", "Shakespeare", "King Lear"],
+    ["There are many ways of going wrong … but only one way of going right", "Aristotle", "Ethics"],
+    ["Confidence implies hopefulness.", "Aristotle", "Ethics"],
+    ["By doing just acts we become just", "Aristotle", "Ethics"],
+    ["Easy to miss the mark and hard to hit.", "Aristotle", "Ethics"],
+    ["The beginning is said to be half of the business", "Aristotle", "Politics"],
+    ["Our starting-point or principle, once found, clears up a number of our difficulties.", "Aristotle", "Ethics"],
+    ["Virtue depends upon ourselves", "Aristotle", "Ethics"],
+    ["By habituating ourselves to despise danger, and to face it, we become courageous", "Aristotle", "Ethics"],
   ];
 
   // A shuffled deck per browser: every quote shows once before any repeats, and never twice in a row.
