@@ -291,7 +291,7 @@ body {
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="dark-panel" id="darkPanel" role="status" aria-live="polite" hidden>
-  <p>Your light is out. Feel along the walls.</p>
+  <p>Your light is out. Continue in the dark or begin again.</p>
   <button class="btn-restart" id="btnRestart" type="button">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     Restart this maze
@@ -352,7 +352,7 @@ body {
     glimmerR: 2.6,        // with the light dead, bolts this close glimmer
     low: 0.25,
     crit: 0.15,
-    joyR: 58,             // joystick travel, CSS px
+    joyR: 52,             // joystick travel, CSS px
     joyAim: 5,            // drags shorter than this are ignored
     joyDead: 14,          // between joyAim and this the beam turns but you stand still
     joyTeach: 6,          // seconds of walking with the joystick drawn; after that it stays invisible
@@ -1374,8 +1374,8 @@ body {
       <h1 class="logo" id="sheetTitle" aria-label="Dark Maze"><span>Dark</span><span>Maze</span></h1>
       <p class="lede">Get out before your light goes out</p>
       <ul class="rules">
-        <li>${ICON.bolt}<span>Grab bolts to recharge</span></li>
         <li>${ICON.beam}<span>Your flashlight lights the way</span></li>
+        <li>${ICON.bolt}<span>Grab bolts to recharge</span></li>
         <li>${ICON.exit}<span>There’s only one exit</span></li>
       </ul>
       <div class="actions">
