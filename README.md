@@ -9,7 +9,7 @@ Open `index.html` in any modern browser, on a phone or a computer. The game is o
 - **Drag anywhere** on the screen to walk. The dot walks the way you drag. Drag a short way to turn the light without moving; drag further to walk faster. For your first few seconds of walking, a joystick ring under your finger shows how the drag steers. After that it stays hidden.
 - **The flashlight dims and its reach shrinks** over about a minute. Near the end it flickers, then it goes out.
 - **Lightning bolts** recharge 35% of the battery. Walking over one with a full battery leaves it there for later.
-- **Each bolt shows a short quote** from the great works, from Homer to Shakespeare. There are 145, shuffled so none repeats until you have seen them all. None of them refers to a god.
+- **Each bolt shows a short quote** from the great works, from Homer to Shakespeare. There are 210, shuffled so none repeats until you have seen them all. None of them names a god.
 - **The light shines through walls**, so you can see what's on the other side. You can't walk through them.
 - **There is only one path out.** The single exit is somewhere in the outer wall, and a faint cold light leaks in around it.
 - With the light dead you can still move. Bumping or sliding along a wall shows that wall for a moment, and bolts very close by glimmer. A **Restart this maze** button also appears at the top if you'd rather start the maze over.
@@ -27,7 +27,7 @@ Desktop: drag with the mouse, or use WASD / arrow keys. `P` or `Esc` pauses.
 | Bolts | The route out is split into stretches of 11 cells. Each stretch gets one bolt in a side branch near it, preferring dead ends, so the bolts don't trace the answer. Extra bolts go in far dead ends. |
 | Light | The maze is drawn fully lit, then multiplied by a small world-space light map. The map holds the beam (radial × conic falloff), a halo around the dot, the exit glow and wall-touch flashes. Nothing occludes it, which is why the light passes through walls. It fades over about 0.16 s, so sweeps and flicker look soft. |
 | Battery | Drains linearly over 62 s. Brightness and reach both follow the charge, and the last 5% sputters out. |
-| Quotes | 359 candidates were each checked word for word against a public-domain translation and scored from 1 to 100 for how much they lift you, how well they fit a dark maze and how quickly they read. The game has the 137 that score 74 or more, plus 8 more Aristotle lines picked by hand, leaving out any that refer to a god. One long line is cut in the middle, and the cut is marked with an ellipsis (…). They sit in the `QUOTES` list in `index.html`, best first. A per-browser shuffled deck ensures no repeats until the deck runs out, and never the same quote twice in a row. Each stays up for about a quarter second a word (3–6.5 s). |
+| Quotes | 359 candidates were each checked word for word against a public-domain translation and scored from 1 to 100 for how much they lift you, how well they fit a dark maze and how quickly they read. The game has the 137 that score 74 or more, plus 73 more picked by hand; none names a god. One long line is cut in the middle, and the cut is marked with an ellipsis (…). They sit in the `QUOTES` list in `index.html`, best first. A per-browser shuffled deck ensures no repeats until the deck runs out, and never the same quote twice in a row. Each stays up for about a quarter second a word (3–6.5 s). |
 | Movement | Circle-vs-box collision with sub-stepping. Gentle steering keeps you centred in corridors and slides you into an opening you're pushing toward. |
 | Mobile | Pointer events with capture, `touch-action: none`, no pinch zoom or pull-to-refresh, safe-area insets, pixel ratio capped at 2, auto-pause when the tab is hidden. |
 
@@ -45,7 +45,7 @@ Needs Playwright with Chromium. The test:
 
 - Generates 360 mazes from 11×11 to 49×49 and checks the rules: every cell reachable, no loops, exactly one opening, a connected route, and sensible bolt placement.
 - Plays on an emulated iPhone: a real touch drag, walls blocking the dot, battery stages, the light dying, a recharge and its quote, pause and resume, escaping, and the next level.
-- Checks the quote deck: every quote shows once before any repeats, none refers to a god, and the longest quote fits a 360px phone.
+- Checks the quote deck: every quote shows once before any repeats, none names a god, and the longest quote fits a 360px phone.
 - Checks that nothing plays a sound or vibrates through a whole run.
 - Checks Choose level with a saved game: only beaten levels and the next one can be picked, and replaying an earlier level keeps your progress.
 - Renders the title screen in landscape and on desktop.

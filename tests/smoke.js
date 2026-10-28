@@ -273,7 +273,7 @@ async function open(browser, options, saved) {
   const noise = await page.evaluate(() => window.__noise);
   check(noise.audio === 0 && noise.vibrate === 0, `no sound and no vibration through a whole run (${noise.audio} audio, ${noise.vibrate} vibrate)`);
   const godly = await page.evaluate(() => DarkMaze.QUOTES.filter(([q]) => /\b(gods?|god's|sun-god|zeus|jove|prometheus|heaven|divine)\b/i.test(q) || q.split(' / ').some((line) => /\s(Thy|Thee|Thou)\b/.test(line))).map(([q]) => q));
-  check(godly.length === 0, `no in-game quote refers to a god ${godly.length ? JSON.stringify(godly) : ''}`);
+  check(godly.length === 0, `no in-game quote names a god ${godly.length ? JSON.stringify(godly) : ''}`);
   check(await page.evaluate(() => !document.getElementById('btnMute')), 'there is no sound button');
 
   check(errors.length === 0, `no console errors on phone ${errors.length ? JSON.stringify(errors) : ''}`);
